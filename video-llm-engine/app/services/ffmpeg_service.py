@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
+VIDEO_LLM_MAX_FRAMES = 16
+
+
 class FFmpegError(RuntimeError):
     """Raised when ffmpeg or ffprobe cannot process a media file."""
 
@@ -123,7 +126,7 @@ class FFmpegService:
         self,
         file_path: str | Path,
         job_id: int | str,
-        max_frames: int = 8,
+        max_frames: int = 16,
         width: int = 768,
     ) -> list[SampledFrame]:
         self.ensure_available()
@@ -132,7 +135,7 @@ class FFmpegService:
         output_dir = self._job_dir(job_id) / "frames"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        max_frames = max(1, max_frames)
+        max_frames = min(max(1, int(max_frames)), VIDEO_LLM_MAX_FRAMES)
         duration = metadata.durationSeconds or 0
         interval = max(duration / max_frames, 1.0)
         output_pattern = output_dir / "frame_%03d.jpg"

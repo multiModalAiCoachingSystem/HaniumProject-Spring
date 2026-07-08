@@ -2,6 +2,7 @@ package com.hanium.presentation.application.analysis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hanium.presentation.application.storage.StorageCleanupService;
 import com.hanium.presentation.common.util.AnalysisFailureMessages;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.analysis.repository.AnalysisJobRepository;
@@ -26,6 +27,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
@@ -38,6 +41,7 @@ public class AnalysisPipelineService {
     private final AnalysisEngineClient analysisEngineClient;
     private final VideoLlmEngineClient videoLlmEngineClient;
     private final ObjectMapper objectMapper;
+    private final StorageCleanupService storageCleanupService;
     private final TransactionTemplate transactionTemplate;
 
     public AnalysisPipelineService(AnalysisJobRepository analysisJobRepository,
@@ -45,12 +49,14 @@ public class AnalysisPipelineService {
                                    AnalysisEngineClient analysisEngineClient,
                                    VideoLlmEngineClient videoLlmEngineClient,
                                    ObjectMapper objectMapper,
+                                   StorageCleanupService storageCleanupService,
                                    PlatformTransactionManager transactionManager) {
         this.analysisJobRepository = analysisJobRepository;
         this.resultRepository = resultRepository;
         this.analysisEngineClient = analysisEngineClient;
         this.videoLlmEngineClient = videoLlmEngineClient;
         this.objectMapper = objectMapper;
+        this.storageCleanupService = storageCleanupService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -185,6 +191,7 @@ public class AnalysisPipelineService {
             resultRepository.deleteByJobId(job.getId());
             job.cancel();
             analysisJobRepository.save(job);
+            cleanupAnalysisArtifactsAfterCommit(job.getId());
             log.info("Analysis cancellation completed. jobId={} status={}", job.getId(), job.getStatus());
             return true;
         }
@@ -193,6 +200,19 @@ public class AnalysisPipelineService {
             return true;
         }
         return false;
+    }
+
+    private void cleanupAnalysisArtifactsAfterCommit(Long jobId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            storageCleanupService.cleanupAnalysisArtifacts(jobId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                storageCleanupService.cleanupAnalysisArtifacts(jobId);
+            }
+        });
     }
 
     private <T> T inTransaction(Supplier<T> supplier) {

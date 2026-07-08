@@ -2,10 +2,11 @@
 import httpClient from './httpClient.js';
 
 // 함수 역할: uploadVideo에서 업로드 파일을 검증하고 저장 또는 응답 데이터를 구성합니다.
-export const uploadVideo = (file, onProgress) => {
+export const uploadVideo = (file, onProgress, signal) => {
   const formData = new FormData();
   formData.append('file', file);
   return httpClient.post('/videos', formData, {
+    signal,
     onUploadProgress: (event) => {
       if (!event.total || !onProgress) return;
       onProgress(Math.round((event.loaded * 100) / event.total));

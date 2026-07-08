@@ -1643,9 +1643,20 @@ h3 {
   color: var(--blue);
 }
 
+.status-pill.warning {
+  background: #fffbeb;
+  color: var(--amber);
+}
+
 .status-pill.danger {
   background: #fff1f2;
   color: var(--red);
+}
+
+.modal-note {
+  border-left: 3px solid var(--amber);
+  background: #fffbeb;
+  padding: 10px 12px;
 }
 
 .transcript-box {

@@ -1,6 +1,7 @@
 // 역할: 도메인 저장소와 외부 클라이언트를 조합해 실제 유스케이스 흐름을 처리하는 서비스입니다.
 package com.hanium.presentation.application.video;
 
+import com.hanium.presentation.application.storage.StorageCleanupService;
 import com.hanium.presentation.domain.user.entity.User;
 import com.hanium.presentation.domain.video.entity.UploadedVideo;
 import com.hanium.presentation.domain.video.repository.UploadedVideoRepository;
@@ -30,11 +31,14 @@ public class VideoFileCommandService {
     );
 
     private final UploadedVideoRepository uploadedVideoRepository;
+    private final StorageCleanupService storageCleanupService;
     private final Path storageRoot;
 
     public VideoFileCommandService(UploadedVideoRepository uploadedVideoRepository,
+                                   StorageCleanupService storageCleanupService,
                                    @Value("${app.storage.root:${STORAGE_ROOT:/data}}") String storageRoot) {
         this.uploadedVideoRepository = uploadedVideoRepository;
+        this.storageCleanupService = storageCleanupService;
         this.storageRoot = Path.of(storageRoot).normalize();
     }
 
@@ -52,11 +56,17 @@ public class VideoFileCommandService {
             Files.createDirectories(uploadDir);
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException exception) {
+            storageCleanupService.cleanupPartialUpload(target);
             throw new BusinessException(ErrorCode.STORAGE_ERROR);
         }
         UploadedVideo video = new UploadedVideo(user, cleanOriginalName(file.getOriginalFilename()), storedFilename,
                 "uploads/" + storedFilename, file.getContentType(), file.getSize());
-        return VideoResponse.from(uploadedVideoRepository.save(video));
+        try {
+            return VideoResponse.from(uploadedVideoRepository.save(video));
+        } catch (RuntimeException exception) {
+            storageCleanupService.cleanupPartialUpload(target);
+            throw exception;
+        }
     }
 
     // 함수 역할: validate에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.

@@ -13,6 +13,7 @@ import {
 
 const PAGE_SIZE = 15;
 const ROLE_PRIORITY = { ADMIN: 3, MANAGER: 2, USER: 1 };
+const DELETABLE_ANALYSIS_STATUSES = new Set(['DONE', 'FAILED', 'CANCELED']);
 const SYSTEM_LOGS = [
   {
     id: 'LOG-240706-001',
@@ -392,6 +393,10 @@ export default function AdminPage() {
 
   // 함수 역할: 관리자 확인을 받은 뒤 선택한 분석 작업을 삭제하고 목록을 갱신합니다.
   const handleDeleteAnalysis = async (job) => {
+    if (!DELETABLE_ANALYSIS_STATUSES.has(job.status)) {
+      setError('완료, 실패 또는 취소된 분석 작업만 삭제할 수 있습니다.');
+      return;
+    }
     if (!window.confirm(`#${job.jobId} 분석 작업을 삭제할까요? 연결된 결과도 함께 삭제됩니다.`)) {
       return;
     }
@@ -597,7 +602,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     className="danger-button"
-                    disabled={workingAction === `analysis-${job.jobId}`}
+                    disabled={workingAction === `analysis-${job.jobId}` || !DELETABLE_ANALYSIS_STATUSES.has(job.status)}
                     onClick={() => handleDeleteAnalysis(job)}
                   >
                     {workingAction === `analysis-${job.jobId}` ? '삭제 중' : '삭제'}

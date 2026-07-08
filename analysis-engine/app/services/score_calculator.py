@@ -148,11 +148,14 @@ class ScoreCalculator:
         movement_ratio = float(metrics.get("gestureMovementRatio", 0.46))
         count_per_min = float(metrics.get("gestureCountPerMinute", 4.2))
         still_ratio = float(metrics.get("stillHandRatio", 0.18))
+        activity_score = metrics.get("gestureActivityScore")
 
         movement_score = self._range_score(movement_ratio, lower=0.15, ideal_low=0.30, ideal_high=0.65, upper=0.85)
         count_score = self._range_score(count_per_min, lower=1.0, ideal_low=3.0, ideal_high=8.0, upper=14.0)
         still_penalty = min(18.0, still_ratio * 45.0)
         score = self._clamp(self._avg([movement_score, count_score]) - still_penalty)
+        if activity_score is not None:
+            score = self._clamp(score * 0.55 + float(activity_score) * 0.45)
 
         return self._item(
             "GESTURE",
@@ -164,6 +167,12 @@ class ScoreCalculator:
                 "gestureMovementRatio": movement_ratio,
                 "gestureCountPerMinute": count_per_min,
                 "stillHandRatio": still_ratio,
+                "gestureActivityScore": activity_score,
+                "gestureAverageMovement": metrics.get("gestureAverageMovement"),
+                "gestureBalance": metrics.get("gestureBalance"),
+                "gestureStability": metrics.get("gestureStability"),
+                "gestureVisibleRatio": metrics.get("gestureVisibleRatio"),
+                "gestureAnalysisFallback": metrics.get("gestureAnalysisFallback"),
             },
         )
 

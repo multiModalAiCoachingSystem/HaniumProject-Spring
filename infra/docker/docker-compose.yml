@@ -3,8 +3,8 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: presentation_coaching_ai
-      MYSQL_USER: presentation
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
@@ -23,15 +23,15 @@ services:
       context: ../../analysis-engine
       dockerfile: ../infra/docker/analysis-engine.Dockerfile
     environment:
-      STORAGE_ROOT: /data
-      STT_PROVIDER: FASTER_WHISPER
-      WHISPER_MODEL: base
-      WHISPER_DEVICE: cpu
-      WHISPER_COMPUTE_TYPE: int8
-      STT_LANGUAGE: ko
-      HF_HOME: /data/models/huggingface
+      STORAGE_ROOT: ${STORAGE_ROOT}
+      STT_PROVIDER: ${STT_PROVIDER}
+      WHISPER_MODEL: ${WHISPER_MODEL}
+      WHISPER_DEVICE: ${WHISPER_DEVICE}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE}
+      STT_LANGUAGE: ${STT_LANGUAGE}
+      HF_HOME: ${HF_HOME}
     volumes:
-      - "${HOST_STORAGE_PATH:-D:/presentation-coaching-ai/storage}:/data"
+      - "${HOST_STORAGE_PATH:-../../storage}:/data"
     healthcheck:
       test:
         [
@@ -49,33 +49,34 @@ services:
       context: ../../video-llm-engine
       dockerfile: ../infra/docker/video-llm-engine.Dockerfile
     environment:
-      STORAGE_ROOT: /data
-      VIDEO_LLM_PROVIDER: OLLAMA
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      TEXT_LLM_MODEL: qwen3:4b
-      VIDEO_LLM_MODEL: qwen3-vl:4b
+      STORAGE_ROOT: ${STORAGE_ROOT}
+      VIDEO_LLM_PROVIDER: ${VIDEO_LLM_PROVIDER}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      TEXT_LLM_PROVIDER: ${TEXT_LLM_PROVIDER}
+      TEXT_LLM_MODEL: ${TEXT_LLM_MODEL}
+      VIDEO_LLM_MODEL: ${VIDEO_LLM_MODEL}
     volumes:
-      - "${HOST_STORAGE_PATH:-D:/presentation-coaching-ai/storage}:/data"
+      - "${HOST_STORAGE_PATH:-../../storage}:/data"
 
   backend:
     build:
       context: ../../backend
       dockerfile: ../infra/docker/backend.Dockerfile
     environment:
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: presentation_coaching_ai
-      DB_USERNAME: presentation
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      STORAGE_ROOT: /data
-      ANALYSIS_ENGINE_BASE_URL: http://analysis-engine:8001
-      VIDEO_LLM_ENGINE_BASE_URL: http://video-llm-engine:8002
-      TEXT_LLM_PROVIDER: OLLAMA
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-      TEXT_LLM_MODEL: qwen3:4b
+      STORAGE_ROOT: ${STORAGE_ROOT}
+      ANALYSIS_ENGINE_BASE_URL: ${ANALYSIS_ENGINE_BASE_URL}
+      VIDEO_LLM_ENGINE_BASE_URL: ${VIDEO_LLM_ENGINE_BASE_URL}
+      TEXT_LLM_PROVIDER: ${TEXT_LLM_PROVIDER}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      TEXT_LLM_MODEL: ${TEXT_LLM_MODEL}
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - "${HOST_STORAGE_PATH:-D:/presentation-coaching-ai/storage}:/data"
+      - "${HOST_STORAGE_PATH:-../../storage}:/data"
     depends_on:
       mysql:
         condition: service_healthy

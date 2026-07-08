@@ -9,6 +9,8 @@ export const getMyAnalyses = () => httpClient.get('/analyses');
 export const getAnalysisReports = (params) => httpClient.get('/analyses/reports', { params });
 // 함수 역할: getAnalysisStatus에서 필요한 값이나 상태를 조회해 반환합니다.
 export const getAnalysisStatus = (jobId) => httpClient.get(`/analyses/${jobId}/status`);
+// 함수 역할: cancelAnalysis에서 대기 또는 진행 중인 분석 작업의 중단을 요청합니다.
+export const cancelAnalysis = (jobId) => httpClient.post(`/analyses/${jobId}/cancel`);
 // 함수 역할: retryAnalysis에서 실패한 내 분석 작업을 다시 실행합니다.
 export const retryAnalysis = (jobId) => httpClient.post(`/analyses/${jobId}/retry`);
 // 함수 역할: deleteAnalysisReport에서 완료 또는 실패한 리포트를 삭제합니다.

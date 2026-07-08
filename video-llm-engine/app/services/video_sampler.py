@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from app.services.ffmpeg_service import FFmpegService
+from app.services.ffmpeg_service import FFmpegService, VIDEO_LLM_MAX_FRAMES
 
 
 class VideoSampler:
@@ -13,6 +13,7 @@ class VideoSampler:
 
     # 함수 역할: prepare_samples에서 영상 프레임을 추출하거나 분석에 사용할 샘플을 만듭니다.
     def prepare_samples(self, job_id: int, file_path: str, max_frames: int = 8) -> dict:
+        max_frames = min(max(1, int(max_frames)), VIDEO_LLM_MAX_FRAMES)
         metadata = self.ffmpeg.probe(file_path)
         frames = self.ffmpeg.sample_frames(file_path, job_id=job_id, max_frames=max_frames)
         audio = self.ffmpeg.extract_audio(file_path, job_id=job_id)

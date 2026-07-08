@@ -1,0 +1,30 @@
+# 역할: Spring Boot 실행 환경, DB, 외부 엔진 URL 같은 공통 설정을 정의합니다.
+spring:
+  application:
+    name: presentation-coaching-ai
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 510MB
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:presentation_coaching_ai}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:presentation}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+app:
+  storage:
+    root: ${STORAGE_ROOT:/data}
+  analysis-engine:
+    base-url: ${ANALYSIS_ENGINE_BASE_URL:http://localhost:8001}
+  video-llm-engine:
+    base-url: ${VIDEO_LLM_ENGINE_BASE_URL:http://localhost:8002}
+  text-llm:
+    provider: ${TEXT_LLM_PROVIDER:OLLAMA}
+    base-url: ${OLLAMA_BASE_URL:http://host.docker.internal:11434}
+    model: ${TEXT_LLM_MODEL:qwen3:4b}

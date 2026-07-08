@@ -1,0 +1,5 @@
+# 역할: Spring Boot 프로파일별 실행 설정을 정의합니다.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate

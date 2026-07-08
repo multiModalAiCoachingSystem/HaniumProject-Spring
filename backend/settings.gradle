@@ -1,0 +1,2 @@
+// 역할: Gradle 프로젝트 이름과 빌드 루트 설정을 정의합니다.
+rootProject.name = 'presentation-coaching-ai-backend'

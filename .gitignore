@@ -1,0 +1,59 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Spring Boot / Gradle
+.gradle/
+build/
+backend/.gradle/
+backend/build/
+backend/bin/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Frontend
+node_modules/
+dist/
+
+# Runtime data
+storage/uploads/*
+storage/results/*
+storage/temp/*
+storage/logs/*
+!storage/**/.gitkeep
+*.mp4
+*.mov
+*.wav
+
+# AI 모델 파일
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# Secrets
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+.agents

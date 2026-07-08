@@ -1,0 +1,6 @@
+// 역할: 백엔드의 YesNo 기능을 담당하는 Java 코드입니다.
+package com.hanium.presentation.common.type;
+
+public enum YesNo {
+    YES, NO
+}

@@ -19,7 +19,7 @@ public class StorageCleanupService {
 
     private final Path storageRoot;
 
-    public StorageCleanupService(@Value("${app.storage.root:${STORAGE_ROOT:/data}}") String storageRoot) {
+    public StorageCleanupService(@Value("${app.storage.root:${STORAGE_ROOT:/app/storage}}") String storageRoot) {
         this.storageRoot = Path.of(storageRoot).normalize();
     }
 

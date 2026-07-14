@@ -40,7 +40,7 @@ public class AnalysisCommandService {
                                   VideoFileQueryService videoFileQueryService,
                                   AnalysisPipelineService pipelineService,
                                   StorageCleanupService storageCleanupService,
-                                  @Value("${app.storage.root:${STORAGE_ROOT:/data}}") String storageRoot) {
+                                  @Value("${app.storage.root:${STORAGE_ROOT:/app/storage}}") String storageRoot) {
         this.analysisJobRepository = analysisJobRepository;
         this.resultRepository = resultRepository;
         this.uploadedVideoRepository = uploadedVideoRepository;

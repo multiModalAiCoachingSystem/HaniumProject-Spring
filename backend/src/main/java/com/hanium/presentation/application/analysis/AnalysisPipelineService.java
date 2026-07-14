@@ -2,6 +2,8 @@ package com.hanium.presentation.application.analysis;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hanium.presentation.application.feedback.TextFeedbackResult;
+import com.hanium.presentation.application.feedback.TextFeedbackService;
 import com.hanium.presentation.application.storage.StorageCleanupService;
 import com.hanium.presentation.common.util.AnalysisFailureMessages;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
@@ -40,6 +42,7 @@ public class AnalysisPipelineService {
     private final FinalAnalysisResultRepository resultRepository;
     private final AnalysisEngineClient analysisEngineClient;
     private final VideoLlmEngineClient videoLlmEngineClient;
+    private final TextFeedbackService textFeedbackService;
     private final ObjectMapper objectMapper;
     private final StorageCleanupService storageCleanupService;
     private final TransactionTemplate transactionTemplate;
@@ -48,6 +51,7 @@ public class AnalysisPipelineService {
                                    FinalAnalysisResultRepository resultRepository,
                                    AnalysisEngineClient analysisEngineClient,
                                    VideoLlmEngineClient videoLlmEngineClient,
+                                   TextFeedbackService textFeedbackService,
                                    ObjectMapper objectMapper,
                                    StorageCleanupService storageCleanupService,
                                    PlatformTransactionManager transactionManager) {
@@ -55,6 +59,7 @@ public class AnalysisPipelineService {
         this.resultRepository = resultRepository;
         this.analysisEngineClient = analysisEngineClient;
         this.videoLlmEngineClient = videoLlmEngineClient;
+        this.textFeedbackService = textFeedbackService;
         this.objectMapper = objectMapper;
         this.storageCleanupService = storageCleanupService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -94,7 +99,9 @@ public class AnalysisPipelineService {
 
             if (!update(jobId, AnalysisStep.RESULT_MERGING, 90, "분석 결과를 합치고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
-            if (!saveEngineResult(jobId, basic, videoLlm)) return;
+            TextFeedbackResult textFeedback = generateTextFeedbackSafely(jobId, basic, videoLlm);
+            if (stopIfCancellationRequested(jobId)) return;
+            if (!saveEngineResult(jobId, basic, videoLlm, textFeedback)) return;
             if (stopIfCancellationRequested(jobId)) return;
             complete(jobId);
         } catch (Exception exception) {
@@ -125,7 +132,8 @@ public class AnalysisPipelineService {
         });
     }
 
-    boolean saveEngineResult(Long jobId, AnalysisEngineResponse basic, VideoLlmEngineResponse videoLlm) throws JsonProcessingException {
+    boolean saveEngineResult(Long jobId, AnalysisEngineResponse basic, VideoLlmEngineResponse videoLlm,
+                             TextFeedbackResult textFeedback) throws JsonProcessingException {
         return inTransaction(() -> {
             AnalysisJob job = analysisJobRepository.findByIdWithVideoAndUserForUpdate(jobId).orElseThrow();
             if (applyCancellationIfNeeded(job)) {
@@ -137,7 +145,7 @@ public class AnalysisPipelineService {
 
             List<Map<String, Object>> scores = nullToEmptyList(basic.scores());
             List<Map<String, Object>> feedback = mergeFeedback(basic.observations(), videoLlm.observations());
-            Map<String, Object> summary = mergeSummary(basic, videoLlm);
+            Map<String, Object> summary = mergeSummary(basic, videoLlm, textFeedback);
             double totalScore = basic.totalScore() == null ? 0.0 : basic.totalScore();
 
             try {
@@ -219,7 +227,22 @@ public class AnalysisPipelineService {
         return transactionTemplate.execute(status -> supplier.get());
     }
 
-    private Map<String, Object> mergeSummary(AnalysisEngineResponse basic, VideoLlmEngineResponse videoLlm) {
+    private TextFeedbackResult generateTextFeedbackSafely(Long jobId, AnalysisEngineResponse basic,
+                                                          VideoLlmEngineResponse videoLlm) {
+        try {
+            TextFeedbackResult result = textFeedbackService.generate(jobId, basic, videoLlm);
+            if (result != null) {
+                return result;
+            }
+        } catch (Exception exception) {
+            log.warn("Text LLM feedback service failed unexpectedly. jobId={} reason={}: {}",
+                    jobId, exception.getClass().getSimpleName(), exception.getMessage());
+        }
+        return textFeedbackService.fallback(basic, "NONE", "", "text_feedback_service_unavailable");
+    }
+
+    private Map<String, Object> mergeSummary(AnalysisEngineResponse basic, VideoLlmEngineResponse videoLlm,
+                                             TextFeedbackResult textFeedback) {
         Map<String, Object> summary = new LinkedHashMap<>();
         if (basic.summary() != null) {
             summary.putAll(basic.summary());
@@ -233,6 +256,10 @@ public class AnalysisPipelineService {
         summary.put("videoLlmMetadata", videoLlm.metadata());
         summary.put("sampledFrames", videoLlm.sampledFrames());
         summary.put("extractedAudio", videoLlm.audio());
+        if (textFeedback != null) {
+            summary.put("textFeedback", textFeedback.payload());
+            summary.put("textLlm", textFeedback.metadata());
+        }
         return summary;
     }
 

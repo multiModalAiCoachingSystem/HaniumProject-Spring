@@ -10,6 +10,7 @@ public class TextLlmProperties {
     private String provider;
     private String baseUrl;
     private String model;
+    private int timeoutSeconds = 30;
 
     // 함수 역할: getProvider에서 필요한 값이나 상태를 조회해 반환합니다.
     public String getProvider() {
@@ -39,5 +40,13 @@ public class TextLlmProperties {
     // 함수 역할: setModel에서 대상 객체의 상태를 갱신하고 저장 흐름에 반영합니다.
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public int getTimeoutSeconds() {
+        return timeoutSeconds;
+    }
+
+    public void setTimeoutSeconds(int timeoutSeconds) {
+        this.timeoutSeconds = timeoutSeconds;
     }
 }

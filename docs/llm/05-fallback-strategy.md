@@ -44,7 +44,19 @@ fallback에는 `visionAnalysisFallback=True`와 `visionAnalysisFallbackReason`�
 
 ## Text LLM fallback
 
-Text LLM 호출 자체가 현재 미구현이므로 별도의 모델 실패 fallback도 미구현이다. 현재 최종 결과는 analysis-engine과 video-llm-engine의 observation 병합으로 구성된다.
+`TextFeedbackService`는 Text LLM 실패를 pipeline 실패로 전파하지 않는다. 다음 상황에서는 fallback 피드백을 생성해 `summary_json.textFeedback`에 저장한다.
+
+- `TEXT_LLM_PROVIDER=NONE`
+- `TEXT_LLM_PROVIDER=OPENAI`: 현재 실제 OpenAI 호출은 미구현
+- 지원하지 않는 provider 값
+- Ollama 서버 미실행
+- `qwen3:4b` 모델 미설치 또는 Ollama 오류
+- 응답 timeout
+- 빈 응답
+- JSON 파싱 실패
+- 프롬프트 생성 실패
+
+fallback 피드백도 `presentationSummary`, `overallFeedback`, `strengths`, `weaknesses`, `improvementActions`, `expectedQuestions` 구조를 유지한다. `summary_json.textLlm.fallback=true`와 안전한 `fallbackReason`이 함께 저장된다.
 
 ## 백엔드 실패 fallback
 

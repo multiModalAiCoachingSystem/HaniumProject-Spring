@@ -94,4 +94,55 @@
 
 - `scores_json`: `scores[]`
 - `feedback_json`: analysis-engine observations + video-llm-engine observations
-- `summary_json`: transcript, stt, metrics, videoInfo, videoLlmProvider, videoLlmMetadata, sampledFrames, extractedAudio
+- `summary_json`: transcript, stt, metrics, videoInfo, videoLlmProvider, videoLlmMetadata, sampledFrames, extractedAudio, textFeedback, textLlm
+
+### `summary_json.textFeedback`
+
+`TextFeedbackService`가 생성하거나 fallback으로 채우는 최종 한국어 피드백이다.
+
+```json
+{
+  "presentationSummary": "발표 전체 요약",
+  "overallFeedback": "종합 피드백",
+  "strengths": [
+    {
+      "title": "강점 제목",
+      "description": "설명",
+      "relatedMetric": "EYE_CONTACT"
+    }
+  ],
+  "weaknesses": [
+    {
+      "title": "개선 필요 항목",
+      "description": "설명",
+      "relatedMetric": "VOICE"
+    }
+  ],
+  "improvementActions": [
+    {
+      "title": "개선 방법",
+      "description": "실천 방법"
+    }
+  ],
+  "expectedQuestions": [
+    {
+      "question": "예상 질문",
+      "intent": "질문 의도",
+      "suggestedAnswer": "답변 방향"
+    }
+  ]
+}
+```
+
+### `summary_json.textLlm`
+
+```json
+{
+  "provider": "OLLAMA",
+  "model": "qwen3:4b",
+  "fallback": false,
+  "fallbackReason": "text_llm_generation_failed"
+}
+```
+
+`fallbackReason`은 fallback이 발생한 경우에만 포함된다.

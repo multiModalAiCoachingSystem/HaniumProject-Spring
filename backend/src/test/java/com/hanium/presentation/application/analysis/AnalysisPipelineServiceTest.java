@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hanium.presentation.application.feedback.TextFeedbackResult;
+import com.hanium.presentation.application.feedback.TextFeedbackService;
 import com.hanium.presentation.application.storage.StorageCleanupService;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.analysis.repository.AnalysisJobRepository;
@@ -24,6 +26,7 @@ import com.hanium.presentation.infrastructure.client.videollm.dto.VideoLlmEngine
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.TransactionDefinition;
@@ -35,19 +38,22 @@ class AnalysisPipelineServiceTest {
     private final FinalAnalysisResultRepository resultRepository = mock(FinalAnalysisResultRepository.class);
     private final AnalysisEngineClient analysisEngineClient = mock(AnalysisEngineClient.class);
     private final VideoLlmEngineClient videoLlmEngineClient = mock(VideoLlmEngineClient.class);
+    private final TextFeedbackService textFeedbackService = mock(TextFeedbackService.class);
     private final StorageCleanupService storageCleanupService = mock(StorageCleanupService.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final AnalysisPipelineService pipelineService = new AnalysisPipelineService(
             analysisJobRepository,
             resultRepository,
             analysisEngineClient,
             videoLlmEngineClient,
-            new ObjectMapper(),
+            textFeedbackService,
+            objectMapper,
             storageCleanupService,
             transactionManager()
     );
 
     @Test
-    void runAnalysisCompletesQueuedJobAsDoneAndSavesFinalResult() {
+    void runAnalysisCompletesQueuedJobAsDoneAndSavesFinalResult() throws Exception {
         AnalysisJob job = queuedJob();
         when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
@@ -55,12 +61,16 @@ class AnalysisPipelineServiceTest {
         when(resultRepository.findByJobId(job.getId())).thenReturn(Optional.empty());
         when(analysisEngineClient.analyze(any())).thenReturn(basicResponse(job));
         when(videoLlmEngineClient.analyze(any())).thenReturn(videoLlmResponse(job));
+        when(textFeedbackService.generate(any(), any(), any())).thenReturn(textFeedback());
 
         pipelineService.runAnalysis(job.getId());
 
         assertThat(job.getStatus()).isEqualTo(AnalysisStatus.DONE);
         assertThat(job.getProgressPercent()).isEqualTo(100);
-        verify(resultRepository).save(any(FinalAnalysisResult.class));
+        ArgumentCaptor<FinalAnalysisResult> resultCaptor = ArgumentCaptor.forClass(FinalAnalysisResult.class);
+        verify(resultRepository).save(resultCaptor.capture());
+        Map<String, Object> summary = objectMapper.readValue(resultCaptor.getValue().getSummaryJson(), Map.class);
+        assertThat(summary).containsKeys("textFeedback", "textLlm");
     }
 
     @Test
@@ -125,7 +135,8 @@ class AnalysisPipelineServiceTest {
         job.requestCancel();
         when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
 
-        boolean saved = pipelineService.saveEngineResult(job.getId(), basicResponse(job), videoLlmResponse(job));
+        boolean saved = pipelineService.saveEngineResult(job.getId(), basicResponse(job), videoLlmResponse(job),
+                textFeedback());
 
         assertThat(saved).isFalse();
         assertThat(job.getStatus()).isEqualTo(AnalysisStatus.CANCELED);
@@ -164,6 +175,17 @@ class AnalysisPipelineServiceTest {
 
     private VideoLlmEngineResponse videoLlmResponse(AnalysisJob job) {
         return new VideoLlmEngineResponse(job.getId(), job.getVideo().getId(), "MOCK", Map.of(), List.of(), Map.of(), List.of());
+    }
+
+    private TextFeedbackResult textFeedback() {
+        return TextFeedbackResult.success(Map.of(
+                "presentationSummary", "요약",
+                "overallFeedback", "종합 피드백",
+                "strengths", List.of(),
+                "weaknesses", List.of(),
+                "improvementActions", List.of(),
+                "expectedQuestions", List.of()
+        ), "NONE", "");
     }
 
     private static AbstractPlatformTransactionManager transactionManager() {

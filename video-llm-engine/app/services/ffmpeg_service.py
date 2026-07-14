@@ -52,7 +52,7 @@ class FFmpegService:
         ffmpeg_bin: str | None = None,
         ffprobe_bin: str | None = None,
     ) -> None:
-        self.storage_root = Path(storage_root or os.getenv("STORAGE_ROOT", "/data"))
+        self.storage_root = Path(storage_root or os.getenv("STORAGE_ROOT", "/app/storage"))
         self.ffmpeg_bin = ffmpeg_bin or os.getenv("FFMPEG_BIN", "ffmpeg")
         self.ffprobe_bin = ffprobe_bin or os.getenv("FFPROBE_BIN", "ffprobe")
 

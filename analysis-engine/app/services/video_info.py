@@ -32,7 +32,7 @@ class VideoInfo:
 class VideoInfoService:
     # 함수 역할: __init__에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
     def __init__(self, storage_root: str | Path | None = None, ffprobe_bin: str | None = None) -> None:
-        self.storage_root = Path(storage_root or os.getenv("STORAGE_ROOT", "/data"))
+        self.storage_root = Path(storage_root or os.getenv("STORAGE_ROOT", "/app/storage"))
         self.ffprobe_bin = ffprobe_bin or os.getenv("FFPROBE_BIN", "ffprobe")
 
     # 함수 역할: resolve_path에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.

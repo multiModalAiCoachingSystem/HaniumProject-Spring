@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.services.audio_analyzer import AudioAnalyzer
 from app.services.face_analyzer import FaceAnalyzer
 from app.services.gaze_analyzer import GazeAnalyzer
+from app.services.gesture_analyzer import GestureAnalyzer
 from app.services.pose_analyzer import PoseAnalyzer
 from app.services.score_calculator import ScoreCalculator
 from app.services.stt_service import SttService
@@ -17,6 +18,7 @@ class BasicAnalyzer:
         self.pose = PoseAnalyzer()
         self.gaze = GazeAnalyzer()
         self.face = FaceAnalyzer()
+        self.gesture = GestureAnalyzer()
         self.score_calculator = ScoreCalculator()
         self.stt = SttService()
 
@@ -31,7 +33,7 @@ class BasicAnalyzer:
         metrics.update(self.pose.analyze(info.durationSeconds, file_path))
         metrics.update(self.gaze.analyze(info.durationSeconds, file_path))
         metrics.update(self.face.analyze(info.durationSeconds, file_path))
-        metrics.update(self._gesture_metrics(info.durationSeconds))
+        metrics.update(self.gesture.analyze(info.durationSeconds, file_path))
 
         result = self.score_calculator.calculate(metrics)
         observations = self.score_calculator.observations(result["scores"], info.durationSeconds)
@@ -52,13 +54,4 @@ class BasicAnalyzer:
             "totalScore": result["totalScore"],
             "summary": summary,
             "observations": observations,
-        }
-
-    # 함수 역할: 손 랜드마크 분석 기능이 추가되기 전까지 제스처 활동량을 임시로 추정합니다.
-    @staticmethod
-    def _gesture_metrics(duration_seconds: float) -> dict:
-        return {
-            "gestureMovementRatio": 0.46 if duration_seconds < 300 else 0.40,
-            "gestureCountPerMinute": 4.2,
-            "stillHandRatio": 0.18,
         }

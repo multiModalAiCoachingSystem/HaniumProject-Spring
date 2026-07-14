@@ -1,4 +1,11 @@
 # 역할: MySQL, 백엔드, 프론트엔드, 분석 엔진, nginx를 함께 실행하는 로컬 배포 구성입니다.
+x-storage-bind: &storage-bind
+  type: bind
+  source: ${HOST_STORAGE_PATH:?Set HOST_STORAGE_PATH in infra/docker/.env}
+  target: /app/storage
+  bind:
+    create_host_path: false
+
 services:
   mysql:
     image: mysql:8.4
@@ -23,15 +30,15 @@ services:
       context: ../../analysis-engine
       dockerfile: ../infra/docker/analysis-engine.Dockerfile
     environment:
-      STORAGE_ROOT: ${STORAGE_ROOT}
+      STORAGE_ROOT: ${STORAGE_ROOT:?Set STORAGE_ROOT in infra/docker/.env}
       STT_PROVIDER: ${STT_PROVIDER}
       WHISPER_MODEL: ${WHISPER_MODEL}
       WHISPER_DEVICE: ${WHISPER_DEVICE}
       WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE}
       STT_LANGUAGE: ${STT_LANGUAGE}
-      HF_HOME: ${HF_HOME}
+      HF_HOME: ${HF_HOME:?Set HF_HOME in infra/docker/.env}
     volumes:
-      - "${HOST_STORAGE_PATH:-../../storage}:/data"
+      - *storage-bind
     healthcheck:
       test:
         [
@@ -49,14 +56,14 @@ services:
       context: ../../video-llm-engine
       dockerfile: ../infra/docker/video-llm-engine.Dockerfile
     environment:
-      STORAGE_ROOT: ${STORAGE_ROOT}
+      STORAGE_ROOT: ${STORAGE_ROOT:?Set STORAGE_ROOT in infra/docker/.env}
       VIDEO_LLM_PROVIDER: ${VIDEO_LLM_PROVIDER}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       TEXT_LLM_PROVIDER: ${TEXT_LLM_PROVIDER}
       TEXT_LLM_MODEL: ${TEXT_LLM_MODEL}
       VIDEO_LLM_MODEL: ${VIDEO_LLM_MODEL}
     volumes:
-      - "${HOST_STORAGE_PATH:-../../storage}:/data"
+      - *storage-bind
 
   backend:
     build:
@@ -68,15 +75,16 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
-      STORAGE_ROOT: ${STORAGE_ROOT}
+      STORAGE_ROOT: ${STORAGE_ROOT:?Set STORAGE_ROOT in infra/docker/.env}
       ANALYSIS_ENGINE_BASE_URL: ${ANALYSIS_ENGINE_BASE_URL}
       VIDEO_LLM_ENGINE_BASE_URL: ${VIDEO_LLM_ENGINE_BASE_URL}
       TEXT_LLM_PROVIDER: ${TEXT_LLM_PROVIDER}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       TEXT_LLM_MODEL: ${TEXT_LLM_MODEL}
+      TEXT_LLM_TIMEOUT_SECONDS: ${TEXT_LLM_TIMEOUT_SECONDS}
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - "${HOST_STORAGE_PATH:-../../storage}:/data"
+      - *storage-bind
     depends_on:
       mysql:
         condition: service_healthy

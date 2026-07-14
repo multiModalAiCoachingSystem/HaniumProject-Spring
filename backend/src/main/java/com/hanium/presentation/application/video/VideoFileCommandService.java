@@ -36,7 +36,7 @@ public class VideoFileCommandService {
 
     public VideoFileCommandService(UploadedVideoRepository uploadedVideoRepository,
                                    StorageCleanupService storageCleanupService,
-                                   @Value("${app.storage.root:${STORAGE_ROOT:/data}}") String storageRoot) {
+                                   @Value("${app.storage.root:${STORAGE_ROOT:/app/storage}}") String storageRoot) {
         this.uploadedVideoRepository = uploadedVideoRepository;
         this.storageCleanupService = storageCleanupService;
         this.storageRoot = Path.of(storageRoot).normalize();

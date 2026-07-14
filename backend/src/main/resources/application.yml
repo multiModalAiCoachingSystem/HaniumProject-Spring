@@ -19,7 +19,7 @@ spring:
 
 app:
   storage:
-    root: ${STORAGE_ROOT:/data}
+    root: ${STORAGE_ROOT:/app/storage}
   analysis-engine:
     base-url: ${ANALYSIS_ENGINE_BASE_URL:http://localhost:8001}
   video-llm-engine:
@@ -28,3 +28,4 @@ app:
     provider: ${TEXT_LLM_PROVIDER:OLLAMA}
     base-url: ${OLLAMA_BASE_URL:http://host.docker.internal:11434}
     model: ${TEXT_LLM_MODEL:qwen3:4b}
+    timeout-seconds: ${TEXT_LLM_TIMEOUT_SECONDS:30}

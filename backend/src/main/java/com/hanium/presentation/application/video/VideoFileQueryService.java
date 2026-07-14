@@ -24,7 +24,7 @@ public class VideoFileQueryService {
     private final Path storageRoot;
 
     public VideoFileQueryService(UploadedVideoRepository uploadedVideoRepository,
-                                 @Value("${app.storage.root:${STORAGE_ROOT:/data}}") String storageRoot) {
+                                 @Value("${app.storage.root:${STORAGE_ROOT:/app/storage}}") String storageRoot) {
         this.uploadedVideoRepository = uploadedVideoRepository;
         this.storageRoot = Path.of(storageRoot).normalize();
     }

@@ -1,4 +1,4 @@
-# Docker 실행 가이드
+﻿# Docker 실행 가이드
 
 Docker Compose 파일은 `infra/docker/docker-compose.yml`이다. 서비스는 `mysql`, `analysis-engine`, `video-llm-engine`, `backend`, `frontend`, `nginx`로 구성된다.
 
@@ -10,17 +10,32 @@ Docker Compose 파일은 `infra/docker/docker-compose.yml`이다. 서비스는 `
 Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 ```
 
-`infra/docker/.env`의 실제 값은 사용자가 직접 채운다. 특히 다음 값은 저장소에 커밋하지 않는다.
+`infra/docker/.env`의 실제 비밀번호와 `JWT_SECRET`은 사용자가 직접 채운다. 이 파일은 Git에 커밋하지 않는다.
 
-- `MYSQL_PASSWORD`
-- `MYSQL_ROOT_PASSWORD`
-- `DB_PASSWORD`
-- `JWT_SECRET`
-- `OPENAI_API_KEY`
+## 2. 저장소 경로
 
-## 2. 전체 실행
+업로드 영상, 변환 영상, 분석 임시 파일, Video LLM 프레임/오디오 파일은 Docker bind mount로 공유한다.
 
-프로젝트 루트에서 실행한다.
+| 대상 | 경로 |
+|---|---|
+| 호스트 저장소 | `HOST_STORAGE_PATH=D:/presentation-coaching-storage` |
+| 컨테이너 내부 저장소 | `STORAGE_ROOT=/app/storage` |
+| Compose mount | `${HOST_STORAGE_PATH}:/app/storage` |
+
+`D:/presentation-coaching-ai/storage`는 새 작업 저장 위치로 사용하지 않는다. `HOST_STORAGE_PATH`가 누락되면 compose가 시작 전에 오류를 낸다.
+
+## 3. 설정 검증
+
+```powershell
+docker compose `
+  --env-file .\infra\docker\.env `
+  -f .\infra\docker\docker-compose.yml `
+  config
+```
+
+`config` 출력에는 비밀번호가 포함될 수 있으므로 공유하거나 문서에 붙여 넣지 않는다.
+
+## 4. 전체 실행
 
 ```powershell
 docker compose `
@@ -31,48 +46,29 @@ docker compose `
 
 브라우저 접속 주소는 nginx 기준 `http://localhost`이다.
 
-## 3. backend만 재빌드
+## 5. 컨테이너만 재생성
+
+저장소 mount와 환경변수만 바뀐 경우에는 이미지 재빌드보다 컨테이너 재생성이 핵심이다. 코드나 Dockerfile을 바꾸지 않았다면 다음 명령으로 충분하다.
 
 ```powershell
 docker compose `
   --env-file .\infra\docker\.env `
   -f .\infra\docker\docker-compose.yml `
-  up -d --build backend
+  up -d --force-recreate backend analysis-engine video-llm-engine
 ```
 
-## 4. 설정 검증
+## 6. Mount 확인
 
 ```powershell
-docker compose `
-  --env-file .\infra\docker\.env `
-  -f .\infra\docker\docker-compose.yml `
-  config
+docker inspect presentation-coaching-ai-backend-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+docker inspect presentation-coaching-ai-analysis-engine-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+docker inspect presentation-coaching-ai-video-llm-engine-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
 ```
 
-`config` 출력에 비밀번호가 그대로 보일 수 있으므로 공유하거나 문서에 붙여 넣지 않는다.
+세 서비스 모두 `D:\presentation-coaching-storage -> /app/storage`를 보여야 한다.
 
-## 5. 볼륨과 파일 저장소
+## 7. 기존 MySQL 볼륨 주의사항
 
-| 대상 | 위치 |
-|---|---|
-| MySQL 데이터 | Docker volume `mysql-data` |
-| 업로드 영상, 변환 영상, 분석 임시 파일 | `${HOST_STORAGE_PATH}:/data` |
-
-`HOST_STORAGE_PATH`는 호스트 경로이고, 컨테이너 내부에서는 `STORAGE_ROOT=/data`로 접근한다. 상대 경로는 compose 파일 위치인 `infra/docker` 기준이므로, 프로젝트 루트의 `storage`를 쓰려면 `../../storage`를 사용한다. backend, analysis-engine, video-llm-engine은 같은 저장소를 공유해야 한다.
-
-## 6. 기존 MySQL 볼륨 주의사항
-
-MySQL 컨테이너가 처음 실행될 때 `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `DB_NAME`, `DB_USERNAME`을 사용해 초기 계정과 DB를 만든다.
-
-이미 `mysql-data` 볼륨이 존재하면 `.env` 값을 바꿔도 기존 DB 계정 비밀번호는 자동으로 변경되지 않는다. 이 경우 `DB_PASSWORD`는 반드시 실제 MySQL `presentation` 계정 비밀번호와 같아야 한다.
+MySQL 컨테이너가 처음 실행될 때 `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `DB_NAME`, `DB_USERNAME`으로 초기 계정과 DB를 만든다. 이미 `mysql-data` 볼륨이 있으면 `.env` 값을 바꿔도 기존 DB 계정 비밀번호는 자동 변경되지 않는다.
 
 데이터를 보존해야 하는 경우 `mysql-data` 볼륨을 삭제하지 않는다.
-
-## 7. Dockerfile
-
-| 파일 | 역할 |
-|---|---|
-| `infra/docker/frontend.Dockerfile` | Node 22로 Vite build 후 nginx static 제공 |
-| `infra/docker/backend.Dockerfile` | Gradle `bootJar` 빌드 후 Java 21 JRE에서 실행, ffmpeg 설치 |
-| `infra/docker/analysis-engine.Dockerfile` | Python 3.12, ffmpeg, OpenCV/MediaPipe 의존성 설치 |
-| `infra/docker/video-llm-engine.Dockerfile` | Python 3.12, ffmpeg 설치 |

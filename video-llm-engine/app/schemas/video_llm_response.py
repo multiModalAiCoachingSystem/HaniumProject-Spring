@@ -10,6 +10,7 @@ class VideoLlmResponse(BaseModel):
     jobId: int
     videoId: int
     provider: str
+    model: str
     metadata: dict[str, Any]
     sampledFrames: list[dict[str, Any]]
     audio: dict[str, Any] | None

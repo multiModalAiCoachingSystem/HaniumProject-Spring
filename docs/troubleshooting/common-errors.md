@@ -6,7 +6,7 @@ nginx `client_max_body_size`와 Spring multipart 제한을 확인한다. 현재 
 
 ## 분석이 `VIDEO_FILE_NOT_FOUND`로 실패
 
-백엔드, analysis-engine, video-llm-engine이 같은 storage 볼륨을 `/data`로 공유하는지 확인한다. compose의 `HOST_STORAGE_PATH`가 모든 관련 서비스에 동일하게 마운트되어야 한다.
+백엔드, analysis-engine, video-llm-engine이 같은 storage 볼륨을 `/app/storage`로 공유하는지 확인한다. compose의 `HOST_STORAGE_PATH`가 모든 관련 서비스에 동일하게 마운트되어야 한다.
 
 ## ffmpeg 또는 ffprobe 오류
 
@@ -16,9 +16,9 @@ analysis-engine과 video-llm-engine Dockerfile은 ffmpeg를 설치한다. 로컬
 
 `STT_PROVIDER`, `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `STT_LANGUAGE`를 확인한다. faster-whisper import 실패나 모델 로딩 실패 시 `stt.available=false`로 결과가 계속 진행될 수 있다.
 
-## Qwen-VL 결과가 fallback으로만 나옴
+## Video LLM 결과가 fallback으로만 나옴
 
-`VIDEO_LLM_PROVIDER=OLLAMA`, `OLLAMA_BASE_URL`, `VIDEO_LLM_MODEL`을 확인한다. Ollama `/api/generate` 호출 실패 또는 JSON 파싱 실패 시 `VIDEO_QUALITY` category의 `INFO` fallback observation이 반환된다.
+`VIDEO_LLM_PROVIDER`, `NVIDIA_API_KEY`, `NVIDIA_API_BASE_URL`, `OLLAMA_BASE_URL`, `OLLAMA_VIDEO_LLM_MODEL`을 확인한다. `VIDEO_LLM_PROVIDER=NVIDIA_NIM`에서 NVIDIA 호출이 실패하면 `VIDEO_LLM_FALLBACK_PROVIDER=OLLAMA` 설정에 따라 Ollama `qwen3-vl:4b`로 fallback된다. 두 provider 모두 실패하거나 `VIDEO_LLM_PROVIDER=NONE`이면 `VIDEO_QUALITY` category의 `INFO` fallback observation이 반환된다.
 
 ## 리포트 삭제가 실패
 

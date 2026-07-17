@@ -14,12 +14,15 @@ class QwenVlRunner:
     # 함수 역할: __init__에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
     def __init__(self) -> None:
         self.base_url = settings.ollama_base_url.rstrip("/")
-        self.model = settings.video_llm_model
+        self.model = settings.ollama_video_llm_model
+        self.last_fallback_reason: str | None = None
 
     # 함수 역할: analyze_frames에서 발표 분석 요청, 엔진 호출, 결과 처리 흐름을 조율합니다.
     def analyze_frames(self, frames: list[dict], metadata: dict) -> list[dict]:
+        self.last_fallback_reason = None
         image_paths = [frame["path"] for frame in frames[:4] if frame.get("path")]
         if not image_paths:
+            self.last_fallback_reason = "NO_SAMPLED_FRAMES"
             return []
 
         payload = {
@@ -40,8 +43,12 @@ class QwenVlRunner:
         try:
             with urllib.request.urlopen(request, timeout=240) as response:
                 data = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
+            self.last_fallback_reason = "OLLAMA_REQUEST_FAILED"
             return [self._fallback_observation(f"Qwen-VL request failed: {exc}")]
+        except json.JSONDecodeError:
+            self.last_fallback_reason = "OLLAMA_RESPONSE_INVALID_JSON"
+            return [self._fallback_observation("Qwen-VL returned invalid JSON")]
 
         return self._parse_observations(data.get("response", ""), frames[:4])
 
@@ -85,10 +92,12 @@ JSON schema:
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
+            self.last_fallback_reason = "OLLAMA_RESPONSE_NOT_JSON"
             return [self._fallback_observation(raw[:800])]
 
         observations = parsed.get("observations", [])
         if not isinstance(observations, list):
+            self.last_fallback_reason = "OLLAMA_RESPONSE_INVALID_SCHEMA"
             return []
 
         frame_times = [

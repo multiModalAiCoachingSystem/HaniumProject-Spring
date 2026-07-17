@@ -43,6 +43,7 @@ public class AnalysisPipelineService {
     private final AnalysisEngineClient analysisEngineClient;
     private final VideoLlmEngineClient videoLlmEngineClient;
     private final TextFeedbackService textFeedbackService;
+    private final VideoObservationLocalizationService videoObservationLocalizationService;
     private final ObjectMapper objectMapper;
     private final StorageCleanupService storageCleanupService;
     private final TransactionTemplate transactionTemplate;
@@ -52,6 +53,7 @@ public class AnalysisPipelineService {
                                    AnalysisEngineClient analysisEngineClient,
                                    VideoLlmEngineClient videoLlmEngineClient,
                                    TextFeedbackService textFeedbackService,
+                                   VideoObservationLocalizationService videoObservationLocalizationService,
                                    ObjectMapper objectMapper,
                                    StorageCleanupService storageCleanupService,
                                    PlatformTransactionManager transactionManager) {
@@ -60,6 +62,7 @@ public class AnalysisPipelineService {
         this.analysisEngineClient = analysisEngineClient;
         this.videoLlmEngineClient = videoLlmEngineClient;
         this.textFeedbackService = textFeedbackService;
+        this.videoObservationLocalizationService = videoObservationLocalizationService;
         this.objectMapper = objectMapper;
         this.storageCleanupService = storageCleanupService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -89,12 +92,15 @@ public class AnalysisPipelineService {
 
             if (!update(jobId, AnalysisStep.VIDEO_LLM_ANALYSIS, 75, "영상 장면을 AI가 관찰하고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
+            log.info("Video LLM engine request started. jobId={} videoId={}", job.getId(), video.getId());
             VideoLlmEngineResponse videoLlm = videoLlmEngineClient.analyze(
                     new VideoLlmEngineRequest(job.getId(), video.getId(), filePath)
             );
             if (videoLlm == null) {
                 throw new IllegalStateException("video-llm-engine returned empty response");
             }
+            log.info("Video LLM engine request completed. jobId={} provider={} model={} fallbackUsed={}",
+                    job.getId(), videoLlm.provider(), videoLlm.model(), videoLlmFallbackUsed(videoLlm));
             if (stopIfCancellationRequested(jobId)) return;
 
             if (!update(jobId, AnalysisStep.RESULT_MERGING, 90, "분석 결과를 합치고 있습니다.")) return;
@@ -139,9 +145,6 @@ public class AnalysisPipelineService {
             if (applyCancellationIfNeeded(job)) {
                 return false;
             }
-            if (resultRepository.findByJobId(jobId).isPresent()) {
-                return true;
-            }
 
             List<Map<String, Object>> scores = nullToEmptyList(basic.scores());
             List<Map<String, Object>> feedback = mergeFeedback(basic.observations(), videoLlm.observations());
@@ -149,6 +152,11 @@ public class AnalysisPipelineService {
             double totalScore = basic.totalScore() == null ? 0.0 : basic.totalScore();
 
             try {
+                resultRepository.findByJobId(jobId).ifPresent(existing -> {
+                    log.warn("Replacing existing final analysis result before saving new engine result. jobId={} resultId={}",
+                            jobId, existing.getId());
+                    resultRepository.deleteByJobId(jobId);
+                });
                 resultRepository.save(new FinalAnalysisResult(job, totalScore,
                         objectMapper.writeValueAsString(scores),
                         objectMapper.writeValueAsString(feedback),
@@ -248,11 +256,13 @@ public class AnalysisPipelineService {
             summary.putAll(basic.summary());
         }
         summary.put("durationSeconds", basic.durationSeconds());
+        summary.put("totalScore", basic.totalScore() == null ? 0.0 : basic.totalScore());
         summary.put("transcript", basic.transcript() == null ? "" : basic.transcript());
         summary.put("stt", basic.stt());
         summary.put("metrics", basic.metrics());
         summary.put("videoInfo", basic.videoInfo());
         summary.put("videoLlmProvider", videoLlm.provider());
+        summary.put("videoLlmModel", videoLlm.model());
         summary.put("videoLlmMetadata", videoLlm.metadata());
         summary.put("sampledFrames", videoLlm.sampledFrames());
         summary.put("extractedAudio", videoLlm.audio());
@@ -267,11 +277,19 @@ public class AnalysisPipelineService {
                                                     List<Map<String, Object>> videoLlmObservations) {
         List<Map<String, Object>> feedback = new ArrayList<>();
         feedback.addAll(nullToEmptyList(basicObservations));
-        feedback.addAll(nullToEmptyList(videoLlmObservations));
+        feedback.addAll(videoObservationLocalizationService.localize(nullToEmptyList(videoLlmObservations)));
         for (int index = 0; index < feedback.size(); index++) {
             feedback.get(index).putIfAbsent("id", index + 1);
         }
         return feedback;
+    }
+
+    private boolean videoLlmFallbackUsed(VideoLlmEngineResponse videoLlm) {
+        if (videoLlm.metadata() == null) {
+            return false;
+        }
+        Object fallbackUsed = videoLlm.metadata().get("fallbackUsed");
+        return Boolean.TRUE.equals(fallbackUsed) || "true".equalsIgnoreCase(String.valueOf(fallbackUsed));
     }
 
     private List<Map<String, Object>> nullToEmptyList(List<Map<String, Object>> source) {

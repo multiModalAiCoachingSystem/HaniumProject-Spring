@@ -57,6 +57,12 @@ public class ResultQueryService {
     // 함수 역할: toResponse에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
     private ResultDetailResponse toResponse(FinalAnalysisResult result) {
         try {
+            List<Map<String, Object>> scores = objectMapper.readValue(
+                    result.getScoresJson(), new TypeReference<List<Map<String, Object>>>() {});
+            List<Map<String, Object>> feedback = objectMapper.readValue(
+                    result.getFeedbackJson(), new TypeReference<List<Map<String, Object>>>() {});
+            Map<String, Object> summary = objectMapper.readValue(
+                    result.getSummaryJson(), new TypeReference<Map<String, Object>>() {});
             return new ResultDetailResponse(
                     result.getId(),
                     result.getJob().getId(),
@@ -66,12 +72,23 @@ public class ResultQueryService {
                     result.getVideo().getOriginalFilename(),
                     result.getVideo().getDurationSeconds(),
                     result.getTotalScore(),
-                    objectMapper.readValue(result.getScoresJson(), new TypeReference<List<Map<String, Object>>>() {}),
-                    objectMapper.readValue(result.getFeedbackJson(), new TypeReference<List<Map<String, Object>>>() {}),
-                    objectMapper.readValue(result.getSummaryJson(), new TypeReference<Map<String, Object>>() {})
+                    scores,
+                    feedback,
+                    summary,
+                    asMap(summary.get("metrics")),
+                    asMap(summary.get("videoLlmMetadata")),
+                    feedback
             );
         } catch (Exception exception) {
             throw new BusinessException(ErrorCode.RESULT_SAVE_ERROR);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        if (value instanceof Map<?, ?> source) {
+            return (Map<String, Object>) source;
+        }
+        return Map.of();
     }
 }

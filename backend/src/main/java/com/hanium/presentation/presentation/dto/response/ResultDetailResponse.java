@@ -8,5 +8,7 @@ import java.util.Map;
 public record ResultDetailResponse(Long resultId, Long jobId, Long videoId, String title, LocalDateTime analysisDate,
                                    String originalFilename, Double durationSeconds, double totalScore,
                                    List<Map<String, Object>> scores, List<Map<String, Object>> feedback,
-                                   Map<String, Object> summary) {
+                                   Map<String, Object> summary, Map<String, Object> metrics,
+                                   Map<String, Object> videoLlmMetadata,
+                                   List<Map<String, Object>> observations) {
 }

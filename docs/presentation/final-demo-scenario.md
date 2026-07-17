@@ -7,7 +7,8 @@
 ## 사전 준비
 
 - MySQL, backend, analysis-engine, video-llm-engine, frontend, nginx 실행
-- Ollama 사용 시 `VIDEO_LLM_PROVIDER=OLLAMA`, `VIDEO_LLM_MODEL=qwen3-vl:4b` 설정
+- NVIDIA Video LLM 사용 시 `VIDEO_LLM_PROVIDER=NVIDIA_NIM`, `VIDEO_LLM_MODEL=nvidia/nemotron-nano-12b-v2-vl`, `NVIDIA_API_KEY` 설정
+- NVIDIA API Key가 없으면 `VIDEO_LLM_FALLBACK_PROVIDER=OLLAMA`, `OLLAMA_VIDEO_LLM_MODEL=qwen3-vl:4b` fallback 설정 확인
 - 테스트용 발표 영상 준비. 500MB 이하, 지원 MIME 타입이어야 한다.
 
 ## 사용자 시나리오
@@ -36,4 +37,4 @@
 
 ## 시연 시 주의할 점
 
-현재 시스템 로그 화면은 실제 서버 로그가 아니라 프론트 mock 데이터이다. Text LLM 최종 피드백과 OpenAI API 사용은 미구현이며, 실제 점수는 analysis-engine에서 계산된다.
+현재 시스템 로그 화면은 실제 서버 로그가 아니라 프론트 mock 데이터이다. 실제 점수는 analysis-engine에서 계산되며, 최종 한국어 피드백은 backend Text LLM `qwen3:4b`가 생성한다.

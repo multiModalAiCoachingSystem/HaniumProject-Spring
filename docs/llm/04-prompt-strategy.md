@@ -2,11 +2,31 @@
 
 ## Video LLM 프롬프트
 
-현재 실제 모델 호출 프롬프트는 `video-llm-engine/app/model/qwen_vl_runner.py`의 `_prompt()`에서 문자열로 생성된다. `video-llm-engine/app/prompts/video_observation_prompt.md`는 placeholder 상태이며 실제 호출에 사용되지 않는다.
+Video LLM 프롬프트는 provider별 runner에서 생성한다.
 
-## 프롬프트 입력
+| Provider | 구현 위치 | 역할 |
+|---|---|---|
+| `NVIDIA_NIM` | `video-llm-engine/app/model/nvidia_nemotron_runner.py` | Nemotron에 영어 시각 관찰 JSON을 요청 |
+| `OLLAMA` | `video-llm-engine/app/model/qwen_vl_runner.py` | 기존 Qwen-VL에 프레임 관찰 JSON을 요청 |
 
-프롬프트에는 다음 정보가 포함된다.
+## NVIDIA Nemotron 프롬프트
+
+Nemotron system prompt에는 다음 규칙이 포함된다.
+
+- valid JSON만 반환
+- Markdown code fence 금지
+- 직접 관찰 가능한 시각 행동만 설명
+- STT, 말하기 속도, 침묵, Filler Word, 최종 점수 추론 금지
+- identity 또는 민감한 개인 속성 추론 금지
+- 긴장감이나 자신감은 단정하지 않고 조심스럽게 표현
+
+user prompt에는 `Video metadata`, 샘플 프레임 timestamp, 반환 JSON schema가 포함된다. 이미지 입력은 OpenAI-compatible content 배열의 `image_url` data URL로 전달한다.
+
+Nemotron은 영어 시각 관찰 결과를 생성한다. 최종 한국어 피드백은 backend의 Text LLM `qwen3:4b`가 담당한다.
+
+## Ollama Qwen-VL 프롬프트
+
+`QwenVlRunner._prompt()`는 기존 qwen3-vl 경로에서 사용된다. 프롬프트에는 다음 정보가 포함된다.
 
 - 역할: `MulMoCo's Qwen-VL presentation coaching model`
 - 지시: 샘플 프레임의 가시 증거만 근거로 분석
@@ -17,7 +37,11 @@
 
 ## 프레임 입력
 
-Ollama 요청의 `images`에는 샘플 프레임 중 최대 4개가 base64로 들어간다. 프레임 전체 목록은 최대 8개까지 추출하지만 모델 호출에는 앞 4개만 사용한다.
+NVIDIA 요청에는 기본 8개 프레임이 `image_url` data URL로 들어간다. `NVIDIA_MAX_IMAGES`로 조정할 수 있지만 NVIDIA API의 이미지 수 제한을 고려해 내부 상한은 10개다.
+
+Ollama 요청의 `images`에는 샘플 프레임 중 최대 4개가 base64로 들어간다. 프레임 전체 목록은 기본 8개까지 추출하고, 외부에서 큰 값이 들어와도 `VIDEO_LLM_MAX_FRAMES=16`으로 제한한다.
+
+원본 500MB 영상 전체를 `video_url` base64로 전송하는 기능은 구현하지 않았다.
 
 ## 시간 구간 지시
 

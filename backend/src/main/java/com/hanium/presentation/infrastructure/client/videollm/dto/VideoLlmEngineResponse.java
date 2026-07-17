@@ -10,6 +10,7 @@ public record VideoLlmEngineResponse(
         Long jobId,
         Long videoId,
         String provider,
+        String model,
         Map<String, Object> metadata,
         List<Map<String, Object>> sampledFrames,
         Map<String, Object> audio,

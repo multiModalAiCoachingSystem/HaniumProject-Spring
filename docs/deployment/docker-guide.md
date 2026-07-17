@@ -12,6 +12,8 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 
 `infra/docker/.env`의 실제 비밀번호와 `JWT_SECRET`은 사용자가 직접 채운다. 이 파일은 Git에 커밋하지 않는다.
 
+NVIDIA Nemotron Video LLM을 사용하려면 `infra/docker/.env`에 `VIDEO_LLM_PROVIDER=NVIDIA_NIM`과 실제 `NVIDIA_API_KEY`를 설정한다. `.env.example`에는 실제 키를 적지 않는다.
+
 ## 2. 저장소 경로
 
 업로드 영상, 변환 영상, 분석 임시 파일, Video LLM 프레임/오디오 파일은 Docker bind mount로 공유한다.
@@ -55,6 +57,15 @@ docker compose `
   --env-file .\infra\docker\.env `
   -f .\infra\docker\docker-compose.yml `
   up -d --force-recreate backend analysis-engine video-llm-engine
+```
+
+Video LLM provider 코드가 변경된 경우에는 `video-llm-engine` 이미지를 재빌드해야 한다.
+
+```powershell
+docker compose `
+  --env-file .\infra\docker\.env `
+  -f .\infra\docker\docker-compose.yml `
+  up -d --build video-llm-engine
 ```
 
 ## 6. Mount 확인

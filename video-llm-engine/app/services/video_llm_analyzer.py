@@ -1,42 +1,224 @@
-# 역할: 샘플링 결과와 LLM runner를 조합해 영상 관찰 분석 결과를 생성합니다.
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
+
 from app.core.config import settings
+from app.model.nvidia_nemotron_runner import NvidiaNemotronError, NvidiaNemotronRunner
 from app.model.qwen_vl_runner import QwenVlRunner
 from app.services.video_sampler import VideoSampler
 
+logger = logging.getLogger(__name__)
+
 
 class VideoLlmAnalyzer:
-    # 함수 역할: __init__에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
-    def __init__(self, sampler: VideoSampler | None = None, runner: QwenVlRunner | None = None) -> None:
+    def __init__(
+        self,
+        sampler: VideoSampler | None = None,
+        runner: QwenVlRunner | None = None,
+        nvidia_runner: NvidiaNemotronRunner | None = None,
+    ) -> None:
         self.sampler = sampler or VideoSampler()
-        self.runner = runner or QwenVlRunner()
+        self.ollama_runner = runner or QwenVlRunner()
+        self.nvidia_runner = nvidia_runner or NvidiaNemotronRunner()
         self.provider = settings.video_llm_provider.upper()
+        self.fallback_provider = settings.video_llm_fallback_provider.upper()
 
-    # 함수 역할: analyze에서 발표 분석 요청, 엔진 호출, 결과 처리 흐름을 조율합니다.
     def analyze(self, job_id: int, video_id: int, file_path: str) -> dict:
         samples = self.sampler.prepare_samples(job_id=job_id, file_path=file_path)
         metadata = samples["metadata"]
         frames = samples["sampledFrames"]
 
-        if self.provider == "OLLAMA":
-            observations = self.runner.analyze_frames(frames, metadata)
-        else:
-            observations = self._mock_observations(metadata, frames)
+        requested_provider = self.provider
+        requested_model = self._requested_model(requested_provider)
+        request_started_at = self._utc_now()
+        logger.info(
+            "Video LLM request started: jobId=%s requestedProvider=%s requestedModel=%s "
+            "inputType=IMAGE_FRAMES frameCount=%s",
+            job_id,
+            requested_provider,
+            requested_model,
+            len(frames),
+        )
+        result = self._analyze_with_provider(self.provider, metadata, frames, job_id)
+        request_completed_at = self._utc_now()
+        response_metadata = {
+            **metadata,
+            **result.get("metadata", {}),
+        }
+        response_metadata.update(
+            {
+                "jobId": job_id,
+                "requestedProvider": requested_provider,
+                "actualProvider": result["provider"],
+                "requestedModel": requested_model,
+                "actualModel": result["model"],
+                "fallbackUsed": bool(response_metadata.get("fallbackUsed", False)),
+                "requestStartedAt": request_started_at,
+                "requestCompletedAt": request_completed_at,
+            }
+        )
+        if response_metadata.get("fallbackReason") is None:
+            response_metadata.pop("fallbackReason", None)
+
+        logger.info(
+            "Video LLM completed: jobId=%s requestedProvider=%s actualProvider=%s "
+            "requestedModel=%s actualModel=%s fallbackUsed=%s fallbackReason=%s "
+            "requestStartedAt=%s requestCompletedAt=%s",
+            job_id,
+            requested_provider,
+            result["provider"],
+            requested_model,
+            result["model"],
+            response_metadata["fallbackUsed"],
+            response_metadata.get("fallbackReason", ""),
+            request_started_at,
+            request_completed_at,
+        )
 
         return {
             "jobId": job_id,
             "videoId": video_id,
-            "provider": self.provider,
-            "model": settings.video_llm_model if self.provider == "OLLAMA" else "MOCK",
-            "metadata": metadata,
+            "provider": result["provider"],
+            "model": result["model"],
+            "metadata": response_metadata,
             "sampledFrames": frames,
             "audio": samples["audio"],
+            "observations": result["observations"],
+        }
+
+    def _analyze_with_provider(self, provider: str, metadata: dict, frames: list[dict], job_id: int) -> dict:
+        if provider == "NVIDIA_NIM":
+            try:
+                return self.nvidia_runner.analyze_frames(frames, metadata, job_id=job_id)
+            except NvidiaNemotronError as exc:
+                fallback_reason = self._nvidia_fallback_reason(exc)
+                fallback_status_code = getattr(exc, "status_code", None)
+                logger.warning(
+                    "Video LLM provider failed. jobId=%s provider=NVIDIA_NIM fallbackReason=%s statusCode=%s",
+                    job_id,
+                    fallback_reason,
+                    fallback_status_code or "",
+                )
+                if self.fallback_provider == "OLLAMA":
+                    return self._ollama_result(
+                        metadata,
+                        frames,
+                        fallback_from="NVIDIA_NIM",
+                        fallback_reason=fallback_reason,
+                        fallback_status_code=fallback_status_code,
+                    )
+                return self._fallback_result(
+                    metadata,
+                    frames,
+                    fallback_from="NVIDIA_NIM",
+                    fallback_reason=fallback_reason,
+                    fallback_status_code=fallback_status_code,
+                )
+
+        if provider == "OLLAMA":
+            return self._ollama_result(metadata, frames)
+
+        if provider == "NONE":
+            return self._fallback_result(metadata, frames, fallback_from="NONE", fallback_reason="PROVIDER_NONE")
+
+        logger.warning("Unsupported Video LLM provider. jobId=%s provider=%s", job_id, provider)
+        return self._fallback_result(metadata, frames, fallback_from=provider, fallback_reason="UNSUPPORTED_PROVIDER")
+
+    def _ollama_result(
+        self,
+        metadata: dict,
+        frames: list[dict],
+        fallback_from: str | None = None,
+        fallback_reason: str | None = None,
+        fallback_status_code: int | None = None,
+    ) -> dict:
+        observations = self.ollama_runner.analyze_frames(frames, metadata)
+        ollama_fallback_reason = getattr(self.ollama_runner, "last_fallback_reason", None)
+        if ollama_fallback_reason:
+            return self._fallback_result(
+                metadata,
+                frames,
+                fallback_from=fallback_from or "OLLAMA",
+                fallback_reason=ollama_fallback_reason,
+                fallback_attempted_provider="OLLAMA",
+            )
+        result_metadata = {
+            "fallbackUsed": fallback_from is not None,
+        }
+        if fallback_from:
+            result_metadata["fallbackFromProvider"] = fallback_from
+        if fallback_reason:
+            result_metadata["fallbackReason"] = fallback_reason
+        if fallback_status_code is not None:
+            result_metadata["fallbackStatusCode"] = fallback_status_code
+        return {
+            "provider": "OLLAMA",
+            "model": settings.ollama_video_llm_model,
+            "metadata": result_metadata,
             "observations": observations,
         }
 
-    # 함수 역할: _mock_observations에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
-    def _mock_observations(self, metadata: dict, frames: list[dict]) -> list[dict]:
+    def _fallback_result(
+        self,
+        metadata: dict,
+        frames: list[dict],
+        fallback_from: str | None = None,
+        fallback_reason: str | None = None,
+        fallback_status_code: int | None = None,
+        fallback_attempted_provider: str | None = None,
+    ) -> dict:
+        result_metadata = {
+            "fallbackUsed": True,
+        }
+        if fallback_from:
+            result_metadata["fallbackFromProvider"] = fallback_from
+        if fallback_reason:
+            result_metadata["fallbackReason"] = fallback_reason
+        if fallback_status_code is not None:
+            result_metadata["fallbackStatusCode"] = fallback_status_code
+        if fallback_attempted_provider:
+            result_metadata["fallbackAttemptedProvider"] = fallback_attempted_provider
+        return {
+            "provider": "NONE",
+            "model": "DETERMINISTIC_FALLBACK",
+            "metadata": result_metadata,
+            "observations": self._fallback_observations(metadata, frames),
+        }
+
+    @staticmethod
+    def _requested_model(provider: str) -> str:
+        if provider == "NVIDIA_NIM":
+            return settings.video_llm_model
+        if provider == "OLLAMA":
+            return settings.ollama_video_llm_model
+        return "DETERMINISTIC_FALLBACK"
+
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _nvidia_fallback_reason(exc: NvidiaNemotronError) -> str:
+        reason_code = getattr(exc, "reason_code", None)
+        if reason_code:
+            return str(reason_code)
+        message = str(exc)
+        if "API_KEY" in message:
+            return "NVIDIA_API_KEY_MISSING"
+        if "HTTP error" in message:
+            return "NVIDIA_HTTP_ERROR"
+        if "payload" in message:
+            return "NVIDIA_PAYLOAD_TOO_LARGE"
+        if "invalid response JSON" in message or "invalid JSON" in message:
+            return "NVIDIA_RESPONSE_INVALID_JSON"
+        if "blank" in message:
+            return "NVIDIA_RESPONSE_EMPTY"
+        if "No sampled frames" in message:
+            return "NO_SAMPLED_FRAMES"
+        return "NVIDIA_REQUEST_FAILED"
+
+    def _fallback_observations(self, metadata: dict, frames: list[dict]) -> list[dict]:
         duration = metadata.get("durationSeconds") or 0
         end = min(duration, 12.0) if duration else 12.0
         frame_count = len(frames)
@@ -47,8 +229,8 @@ class VideoLlmAnalyzer:
                 "category": "VIDEO_QUALITY",
                 "startSeconds": 0.0,
                 "endSeconds": end,
-                "title": "Mock frame preparation",
-                "description": f"Prepared {frame_count} representative frame(s) for Qwen-VL review.",
-                "suggestion": "Set VIDEO_LLM_PROVIDER=OLLAMA to use qwen3-vl:4b.",
+                "title": "Video LLM fallback",
+                "description": f"Prepared {frame_count} representative frame(s), but no external Video LLM result was used.",
+                "suggestion": "Set VIDEO_LLM_PROVIDER=NVIDIA_NIM or OLLAMA with valid model configuration to enable visual LLM review.",
             }
         ]

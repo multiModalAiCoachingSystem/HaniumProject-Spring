@@ -30,11 +30,29 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `WHISPER_DEVICE` | analysis-engine | Whisper 실행 장치 | `cpu` |
 | `WHISPER_COMPUTE_TYPE` | analysis-engine | Whisper compute type | `int8` |
 | `STT_LANGUAGE` | analysis-engine | STT 언어 | `ko` |
+| `AUDIO_VAD_PROVIDER` | analysis-engine | 음성 구간 검출 방식. `RMS`, `SILERO`, `NONE` 중 선택 | `RMS` |
+| `AUDIO_VAD_FALLBACK_PROVIDER` | analysis-engine | Silero 실패 시 fallback 방식 | `RMS` |
+| `VAD_MIN_SPEECH_MS` | analysis-engine | speech segment로 인정할 최소 발화 길이(ms) | `250` |
+| `VAD_MIN_SILENCE_MS` | analysis-engine | pause로 인정할 최소 침묵 길이(ms) | `350` |
+| `VAD_SPEECH_PAD_MS` | analysis-engine | Silero speech segment 앞뒤 보정(ms) | `100` |
+| `VAD_MERGE_GAP_MS` | analysis-engine | 가까운 speech segment 병합 기준(ms) | `200` |
+| `SILERO_VAD_THRESHOLD` | analysis-engine | Silero speech probability threshold | `0.5` |
+| `SILERO_VAD_MODEL_PATH` | analysis-engine | 오프라인 Silero JIT 모델 파일 경로. 비어 있으면 RMS fallback | 빈 값 |
 | `TEXT_LLM_PROVIDER` | backend, video-llm-engine 환경 | Text LLM provider | `OLLAMA` |
 | `TEXT_LLM_MODEL` | backend, video-llm-engine | Text LLM 모델명 | `qwen3:4b` |
 | `TEXT_LLM_TIMEOUT_SECONDS` | backend | Text LLM timeout | `30` |
-| `VIDEO_LLM_PROVIDER` | video-llm-engine | Video LLM provider | `OLLAMA` |
-| `VIDEO_LLM_MODEL` | video-llm-engine | Video LLM 모델명 | `qwen3-vl:4b` |
+| `VIDEO_LLM_PROVIDER` | video-llm-engine | Video LLM provider. `NVIDIA_NIM`, `OLLAMA`, `NONE` 중 선택 | `NVIDIA_NIM` |
+| `VIDEO_LLM_MODEL` | video-llm-engine | NVIDIA Video LLM 모델명 | `nvidia/nemotron-nano-12b-v2-vl` |
+| `VIDEO_LLM_FALLBACK_PROVIDER` | video-llm-engine | NVIDIA 실패 시 fallback provider | `OLLAMA` |
+| `OLLAMA_VIDEO_LLM_MODEL` | video-llm-engine | Ollama Video LLM fallback 모델명 | `qwen3-vl:4b` |
+| `NVIDIA_API_BASE_URL` | video-llm-engine | NVIDIA OpenAI-compatible Chat Completions endpoint | `https://integrate.api.nvidia.com/v1/chat/completions` |
+| `NVIDIA_API_KEY` | video-llm-engine | NVIDIA API Key. 실제 값은 `.env`에만 저장 | 빈 값 |
+| `NVIDIA_REQUEST_TIMEOUT_SECONDS` | video-llm-engine | NVIDIA 요청 timeout | `180` |
+| `NVIDIA_MAX_TOKENS` | video-llm-engine | NVIDIA 응답 token 제한 | `4096` |
+| `NVIDIA_TEMPERATURE` | video-llm-engine | NVIDIA temperature | `0.2` |
+| `NVIDIA_TOP_P` | video-llm-engine | NVIDIA top_p | `1.0` |
+| `NVIDIA_MAX_IMAGES` | video-llm-engine | NVIDIA로 보낼 최대 프레임 수. NVIDIA API 제한을 고려해 내부 상한은 10 | `8` |
+| `NVIDIA_MAX_PAYLOAD_MB` | video-llm-engine | NVIDIA 요청 JSON payload 제한 | `20` |
 | `OLLAMA_BASE_URL` | backend, video-llm-engine | Ollama API URL | `http://host.docker.internal:11434` |
 
 `DB_PASSWORD`는 실제 MySQL `presentation` 계정 비밀번호와 같아야 한다. 기존 `mysql-data` 볼륨이 이미 생성된 뒤 `.env`의 `MYSQL_PASSWORD`를 바꿔도 MySQL 계정 비밀번호는 자동 변경되지 않는다.

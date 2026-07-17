@@ -78,9 +78,26 @@ FastAPI 앱은 `analysis-engine/app/main.py`에서 생성된다. 백엔드 `Anal
     "speechSpeedSpm": 285.0,
     "fillerWordCount": 0,
     "fillerWordRatio": 0.0,
-    "pauseCount": 5,
-    "pauseRatio": 0.08,
-    "volumeStabilityRatio": 0.78
+    "pauseCount": 2,
+    "totalPauseSeconds": 1.8,
+    "averagePauseSeconds": 0.9,
+    "longestPauseSeconds": 1.1,
+    "pauseRatio": 0.375,
+    "speechSeconds": 3.0,
+    "effectiveAudioSeconds": 4.8,
+    "meanVolumeDb": -12.1,
+    "volumeStdDevDb": 0.0,
+    "volumeRangeDb": 0.0,
+    "clippingRatio": 0.0,
+    "volumeStabilityRatio": 1.0,
+    "requestedVadProvider": "RMS",
+    "actualVadProvider": "RMS",
+    "vadFallbackUsed": false,
+    "vadFallbackReason": null,
+    "speechSegmentCount": 2,
+    "audioVadProcessingTimeMs": 14.2,
+    "audioMetricsFallback": false,
+    "audioMetricsFallbackReason": null
   },
   "scores": [],
   "totalScore": 82.5,
@@ -99,6 +116,6 @@ FastAPI 앱은 `analysis-engine/app/main.py`에서 생성된다. 백엔드 `Anal
 
 1. `VideoInfoService.probe()`가 ffprobe로 길이, 해상도, 코덱을 읽는다.
 2. `SttService`가 transcript 제공 여부에 따라 외부 텍스트 또는 faster-whisper STT를 사용한다.
-3. `AudioAnalyzer`, `PoseAnalyzer`, `GazeAnalyzer`, `FaceAnalyzer`가 지표를 만든다.
-4. `BasicAnalyzer._gesture_metrics()`가 임시 제스처 지표를 만든다.
+3. `AudioAnalyzer`가 `AUDIO_VAD_PROVIDER` 설정에 따라 RMS 또는 선택형 Silero VAD로 발화/침묵 지표를 만든다.
+4. `PoseAnalyzer`, `GazeAnalyzer`, `FaceAnalyzer`, `GestureAnalyzer`가 시각 지표를 만든다.
 5. `ScoreCalculator`가 항목별 점수, 최종 점수, 요약, 관찰 피드백을 만든다.

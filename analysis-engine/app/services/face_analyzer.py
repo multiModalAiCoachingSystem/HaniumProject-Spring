@@ -12,4 +12,12 @@ class FaceAnalyzer:
             "tenseExpressionRatio": metrics["tenseExpressionRatio"],
             "smileRatio": metrics["smileRatio"],
             "emotionRatio": metrics["emotionRatio"],
+            "faceAttemptedFrameCount": metrics.get("faceAttemptedFrameCount"),
+            "faceFullFrameDetectedCount": metrics.get("faceFullFrameDetectedCount"),
+            "faceCropRetryAttemptedCount": metrics.get("faceCropRetryAttemptedCount"),
+            "faceCropRetryDetectedCount": metrics.get("faceCropRetryDetectedCount"),
+            "faceDetectedFrameCount": metrics.get("faceDetectedFrameCount"),
+            "faceInputWidth": metrics.get("faceInputWidth"),
+            "faceInputHeight": metrics.get("faceInputHeight"),
+            "faceCropRetryEnabled": metrics.get("faceCropRetryEnabled"),
         }

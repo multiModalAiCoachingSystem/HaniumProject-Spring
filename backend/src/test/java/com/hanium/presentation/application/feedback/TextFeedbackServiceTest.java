@@ -139,6 +139,6 @@ class TextFeedbackServiceTest {
     }
 
     private VideoLlmEngineResponse videoLlmResponse() {
-        return new VideoLlmEngineResponse(1L, 10L, "MOCK", Map.of(), List.of(), Map.of(), List.of());
+        return new VideoLlmEngineResponse(1L, 10L, "MOCK", "mock-model", Map.of(), List.of(), Map.of(), List.of());
     }
 }

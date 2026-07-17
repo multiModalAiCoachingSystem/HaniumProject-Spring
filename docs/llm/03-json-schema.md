@@ -57,8 +57,8 @@
 {
   "jobId": 20,
   "videoId": 10,
-  "provider": "OLLAMA",
-  "model": "qwen3-vl:4b",
+  "provider": "NVIDIA_NIM",
+  "model": "nvidia/nemotron-nano-12b-v2-vl",
   "metadata": {},
   "sampledFrames": [],
   "audio": {},
@@ -67,6 +67,54 @@
 ```
 
 스키마 파일의 `VideoLlmResponse`에는 `model` 필드가 없지만 실제 응답 dict에는 `model`이 포함된다. 백엔드 `VideoLlmEngineResponse`는 `@JsonIgnoreProperties(ignoreUnknown = true)`를 사용하므로 이 필드를 무시한다.
+
+### NVIDIA Nemotron 응답 정규화
+
+`NvidiaNemotronRunner`는 NVIDIA `choices[0].message.content`에서 JSON 객체를 추출한 뒤 backend 호환 `observations[]`로 정규화한다.
+
+모델에 요청하는 기본 JSON 구조:
+
+```json
+{
+  "provider": "NVIDIA_NIM",
+  "model": "nvidia/nemotron-nano-12b-v2-vl",
+  "summary": "Factual visual summary in English",
+  "observations": [
+    {
+      "timestampSeconds": 12.5,
+      "category": "GESTURE",
+      "level": "STRENGTH",
+      "description": "Uses both hands naturally while explaining a key point.",
+      "confidence": 0.82
+    }
+  ],
+  "visualMetrics": {
+    "postureAssessment": "",
+    "gazeAssessment": "",
+    "gestureAssessment": "",
+    "expressionAssessment": ""
+  },
+  "fallbackUsed": false
+}
+```
+
+정규화 후 `observations[]` 예시:
+
+```json
+{
+  "id": 1,
+  "type": "STRENGTH",
+  "category": "GESTURE",
+  "startSeconds": 12.5,
+  "endSeconds": 22.5,
+  "title": "GESTURE visual strength",
+  "description": "Uses both hands naturally while explaining a key point.",
+  "suggestion": "Keep this visual behavior consistent in future presentations.",
+  "confidence": 0.82
+}
+```
+
+`GAZE`는 backend 호환성을 위해 `EYE_CONTACT`로, `GENERAL`과 `VISIBILITY`는 `VIDEO_QUALITY`로 변환된다. Nemotron의 `summary`, `visualMetrics`, `fallbackUsed`는 `metadata.videoLlmResult`에 저장된다.
 
 ## Qwen-VL 프롬프트의 JSON 요구 형식
 

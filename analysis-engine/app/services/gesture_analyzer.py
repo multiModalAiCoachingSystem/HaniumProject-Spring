@@ -10,7 +10,7 @@ from typing import Any
 from app.services.vision_metrics import _clamp, _load_vision_dependencies
 
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 GESTURE_MAX_SAMPLES = 240
 
 
@@ -42,15 +42,15 @@ FALLBACK_GESTURE_METRICS = {
 
 @dataclass(frozen=True)
 class ArmPoints:
-    left_elbow: tuple[float, float]
-    right_elbow: tuple[float, float]
-    left_wrist: tuple[float, float]
-    right_wrist: tuple[float, float]
+    left_elbow: tuple[float, float] | None
+    right_elbow: tuple[float, float] | None
+    left_wrist: tuple[float, float] | None
+    right_wrist: tuple[float, float] | None
     shoulder_width: float
 
 
 class GestureAnalyzer:
-    min_visibility = 0.45
+    min_visibility = 0.15
     min_valid_frames = 8
     min_visible_ratio = 0.20
 
@@ -129,12 +129,18 @@ class GestureAnalyzer:
                 if points is not None:
                     valid_frames += 1
                     if previous is not None:
-                        left, right, movement = self._movement(previous, points)
+                        movement_result = self._movement(previous, points)
+                        if movement_result is None:
+                            previous = points
+                            continue
+                        left, right, movement = movement_result
                         raw_movements.append(movement)
                         if self._is_valid_movement(movement):
                             movements.append(movement)
-                            left_movements.append(left)
-                            right_movements.append(right)
+                            if left is not None:
+                                left_movements.append(left)
+                            if right is not None:
+                                right_movements.append(right)
                             if movement >= 0.06:
                                 active_frames += 1
                             if movement < 0.015:
@@ -179,25 +185,47 @@ class GestureAnalyzer:
 
     def _extract_arm_points(self, pose_landmarks: Any) -> ArmPoints | None:
         landmarks = pose_landmarks.landmark
-        for index in POSE_LANDMARKS.values():
-            landmark = landmarks[index]
-            if getattr(landmark, "visibility", 1.0) < self.min_visibility:
-                return None
-            if not self._normal_point(float(landmark.x), float(landmark.y)):
-                return None
-
-        left_shoulder = self._point(landmarks[POSE_LANDMARKS["left_shoulder"]])
-        right_shoulder = self._point(landmarks[POSE_LANDMARKS["right_shoulder"]])
-        shoulder_width = math.dist(left_shoulder, right_shoulder)
-        if shoulder_width < 0.05:
+        left_shoulder_landmark = landmarks[POSE_LANDMARKS["left_shoulder"]]
+        right_shoulder_landmark = landmarks[POSE_LANDMARKS["right_shoulder"]]
+        if not self._valid_landmark(left_shoulder_landmark) or not self._valid_landmark(right_shoulder_landmark):
             return None
 
+        left_shoulder = self._point(left_shoulder_landmark)
+        right_shoulder = self._point(right_shoulder_landmark)
+
+        left_elbow = self._visible_point(landmarks[POSE_LANDMARKS["left_elbow"]])
+        left_wrist = self._visible_point(landmarks[POSE_LANDMARKS["left_wrist"]])
+        right_elbow = self._visible_point(landmarks[POSE_LANDMARKS["right_elbow"]])
+        right_wrist = self._visible_point(landmarks[POSE_LANDMARKS["right_wrist"]])
+        has_left = left_elbow is not None and left_wrist is not None
+        has_right = right_elbow is not None and right_wrist is not None
+        if not has_left and not has_right:
+            return None
+
+        scale_candidates = [math.dist(left_shoulder, right_shoulder)]
+        if left_elbow is not None and right_elbow is not None:
+            scale_candidates.append(math.dist(left_elbow, right_elbow))
+        if left_wrist is not None and right_wrist is not None:
+            scale_candidates.append(math.dist(left_wrist, right_wrist))
+        shoulder_width = max(scale_candidates + [0.08])
+
         return ArmPoints(
-            left_elbow=self._point(landmarks[POSE_LANDMARKS["left_elbow"]]),
-            right_elbow=self._point(landmarks[POSE_LANDMARKS["right_elbow"]]),
-            left_wrist=self._point(landmarks[POSE_LANDMARKS["left_wrist"]]),
-            right_wrist=self._point(landmarks[POSE_LANDMARKS["right_wrist"]]),
+            left_elbow=left_elbow if has_left else None,
+            right_elbow=right_elbow if has_right else None,
+            left_wrist=left_wrist if has_left else None,
+            right_wrist=right_wrist if has_right else None,
             shoulder_width=shoulder_width,
+        )
+
+    def _visible_point(self, landmark: Any) -> tuple[float, float] | None:
+        if not self._valid_landmark(landmark):
+            return None
+        return self._point(landmark)
+
+    def _valid_landmark(self, landmark: Any) -> bool:
+        return (
+            getattr(landmark, "visibility", 1.0) >= self.min_visibility
+            and self._normal_point(float(landmark.x), float(landmark.y))
         )
 
     @staticmethod
@@ -208,13 +236,39 @@ class GestureAnalyzer:
     def _normal_point(x: float, y: float) -> bool:
         return math.isfinite(x) and math.isfinite(y) and -0.25 <= x <= 1.25 and -0.25 <= y <= 1.25
 
-    def _movement(self, previous: ArmPoints, current: ArmPoints) -> tuple[float, float, float]:
-        left = self._side_movement(previous.left_elbow, previous.left_wrist, current.left_elbow, current.left_wrist)
-        right = self._side_movement(previous.right_elbow, previous.right_wrist, current.right_elbow, current.right_wrist)
+    def _movement(self, previous: ArmPoints, current: ArmPoints) -> tuple[float | None, float | None, float] | None:
         shoulder_width = max(previous.shoulder_width, current.shoulder_width, 0.05)
-        normalized_left = left / shoulder_width
-        normalized_right = right / shoulder_width
-        return normalized_left, normalized_right, (normalized_left + normalized_right) / 2.0
+        normalized_left = None
+        normalized_right = None
+        if (
+            previous.left_elbow is not None
+            and previous.left_wrist is not None
+            and current.left_elbow is not None
+            and current.left_wrist is not None
+        ):
+            normalized_left = self._side_movement(
+                previous.left_elbow,
+                previous.left_wrist,
+                current.left_elbow,
+                current.left_wrist,
+            ) / shoulder_width
+        if (
+            previous.right_elbow is not None
+            and previous.right_wrist is not None
+            and current.right_elbow is not None
+            and current.right_wrist is not None
+        ):
+            normalized_right = self._side_movement(
+                previous.right_elbow,
+                previous.right_wrist,
+                current.right_elbow,
+                current.right_wrist,
+            ) / shoulder_width
+
+        available = [value for value in [normalized_left, normalized_right] if value is not None]
+        if not available:
+            return None
+        return normalized_left, normalized_right, sum(available) / len(available)
 
     @staticmethod
     def _side_movement(

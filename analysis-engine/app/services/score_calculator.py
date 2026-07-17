@@ -78,11 +78,15 @@ class ScoreCalculator:
         natural_ratio = float(metrics.get("naturalExpressionRatio", 0.74))
         tense_ratio = float(metrics.get("tenseExpressionRatio", 0.12))
         smile_ratio = float(metrics.get("smileRatio", 0.18))
+        face_detection_ratio = float(metrics.get("faceDetectionRatio", 1.0))
+        vision_fallback = self._is_truthy(metrics.get("visionAnalysisFallback", False))
 
-        natural_score = self._ratio_score(natural_ratio)
-        tension_penalty = min(35.0, tense_ratio * 100.0)
-        smile_bonus = min(8.0, smile_ratio * 20.0)
-        score = self._clamp(natural_score - tension_penalty + smile_bonus)
+        natural_score = 52.0 + self._clamp(natural_ratio) * 35.0
+        tension_penalty = min(35.0, self._clamp(tense_ratio) * 110.0)
+        smile_bonus = self._expression_smile_bonus(smile_ratio)
+        raw_score = natural_score - tension_penalty + smile_bonus
+        confidence_cap = self._expression_confidence_cap(face_detection_ratio, vision_fallback)
+        score = self._clamp(min(raw_score, confidence_cap))
 
         return self._item(
             "EXPRESSION",
@@ -94,6 +98,10 @@ class ScoreCalculator:
                 "naturalExpressionRatio": natural_ratio,
                 "tenseExpressionRatio": tense_ratio,
                 "smileRatio": smile_ratio,
+                "faceDetectionRatio": face_detection_ratio,
+                "expressionRawScore": round(raw_score, 1),
+                "expressionConfidenceCap": confidence_cap,
+                "expressionFallback": vision_fallback,
             },
         )
 
@@ -140,6 +148,24 @@ class ScoreCalculator:
                 "volumeStabilityRatio": volume_stability,
                 "pauseRatio": pause_ratio,
                 "fillerWordRatio": filler_ratio,
+                "pauseCount": metrics.get("pauseCount"),
+                "totalPauseSeconds": metrics.get("totalPauseSeconds"),
+                "averagePauseSeconds": metrics.get("averagePauseSeconds"),
+                "longestPauseSeconds": metrics.get("longestPauseSeconds"),
+                "speechSeconds": metrics.get("speechSeconds"),
+                "effectiveAudioSeconds": metrics.get("effectiveAudioSeconds"),
+                "meanVolumeDb": metrics.get("meanVolumeDb"),
+                "volumeStdDevDb": metrics.get("volumeStdDevDb"),
+                "volumeRangeDb": metrics.get("volumeRangeDb"),
+                "clippingRatio": metrics.get("clippingRatio"),
+                "audioMetricsFallback": metrics.get("audioMetricsFallback"),
+                "audioMetricsFallbackReason": metrics.get("audioMetricsFallbackReason"),
+                "requestedVadProvider": metrics.get("requestedVadProvider"),
+                "actualVadProvider": metrics.get("actualVadProvider"),
+                "vadFallbackUsed": metrics.get("vadFallbackUsed"),
+                "vadFallbackReason": metrics.get("vadFallbackReason"),
+                "speechSegmentCount": metrics.get("speechSegmentCount"),
+                "audioVadProcessingTimeMs": metrics.get("audioVadProcessingTimeMs"),
             },
         )
 
@@ -381,6 +407,37 @@ class ScoreCalculator:
     @staticmethod
     def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
         return max(low, min(high, value))
+
+    @staticmethod
+    def _is_truthy(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return bool(value)
+
+    @staticmethod
+    def _expression_confidence_cap(face_detection_ratio: float, vision_fallback: bool) -> float:
+        if vision_fallback or face_detection_ratio <= 0.0:
+            return 66.0
+        if face_detection_ratio < 0.05:
+            return 82.0
+        if face_detection_ratio < 0.20:
+            return 88.0
+        if face_detection_ratio < 0.50:
+            return 94.0
+        return 100.0
+
+    @classmethod
+    def _expression_smile_bonus(cls, smile_ratio: float) -> float:
+        ratio = cls._clamp(smile_ratio)
+        if ratio < 0.15:
+            return ratio / 0.15 * 2.0
+        if ratio <= 0.45:
+            return 2.0 + (ratio - 0.15) / 0.30 * 3.0
+        if ratio <= 0.70:
+            return 5.0
+        return max(1.0, 5.0 - (ratio - 0.70) / 0.30 * 4.0)
 
     # 함수 역할: _avg에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
     @classmethod

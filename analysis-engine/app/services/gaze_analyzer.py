@@ -11,4 +11,6 @@ class GazeAnalyzer:
             "eyeContactRatio": metrics["eyeContactRatio"],
             "gazeAwayRatio": metrics["gazeAwayRatio"],
             "faceDetectionRatio": metrics["faceDetectionRatio"],
+            "faceAttemptedFrameCount": metrics.get("faceAttemptedFrameCount"),
+            "faceDetectedFrameCount": metrics.get("faceDetectedFrameCount"),
         }

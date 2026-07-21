@@ -277,11 +277,8 @@ public class AnalysisPipelineService {
                                                     List<Map<String, Object>> videoLlmObservations) {
         List<Map<String, Object>> feedback = new ArrayList<>();
         feedback.addAll(nullToEmptyList(basicObservations));
-        feedback.addAll(videoObservationLocalizationService.localize(nullToEmptyList(videoLlmObservations)));
-        for (int index = 0; index < feedback.size(); index++) {
-            feedback.get(index).putIfAbsent("id", index + 1);
-        }
-        return feedback;
+        feedback.addAll(nullToEmptyList(videoLlmObservations));
+        return videoObservationLocalizationService.localize(feedback);
     }
 
     private boolean videoLlmFallbackUsed(VideoLlmEngineResponse videoLlm) {

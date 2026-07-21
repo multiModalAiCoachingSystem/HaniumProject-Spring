@@ -52,4 +52,4 @@ totalScore = round(sum(categoryScore * weight), 1)
 
 분석 지표가 없거나 vision/audio 분석이 실패하면 각 분석기의 fallback metric이 사용된다. fallback은 전체 분석을 실패시키지 않기 위한 안전장치이며, 실제 분석보다 유리한 최고점으로 처리하지 않는다.
 
-특히 표정 fallback은 `visionAnalysisFallback=true`, `faceDetectionRatio=0.0`으로 전달되며 `EXPRESSION` 최고점이 66점으로 제한된다.
+특히 표정 fallback은 `visionAnalysisFallback=true`, `faceDetectionRatio=0.0`으로 전달되며 `EXPRESSION` 최고점이 60점으로 제한된다.

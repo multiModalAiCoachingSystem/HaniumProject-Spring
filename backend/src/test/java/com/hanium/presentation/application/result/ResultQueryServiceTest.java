@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hanium.presentation.application.analysis.VideoObservationLocalizationService;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.result.entity.FinalAnalysisResult;
 import com.hanium.presentation.domain.result.repository.FinalAnalysisResultRepository;
@@ -21,7 +22,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ResultQueryServiceTest {
     private final FinalAnalysisResultRepository resultRepository = mock(FinalAnalysisResultRepository.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ResultQueryService resultQueryService = new ResultQueryService(resultRepository, objectMapper);
+    private final ResultQueryService resultQueryService = new ResultQueryService(
+            resultRepository, objectMapper, new VideoObservationLocalizationService());
 
     @Test
     void detailReturnsMetricsVideoLlmMetadataAndObservationsFromStoredJson() throws Exception {

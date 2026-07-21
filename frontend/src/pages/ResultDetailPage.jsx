@@ -117,6 +117,9 @@ function fallbackMessages(metrics = {}, videoLlmMetadata = {}) {
   if (metrics.visionAnalysisFallback || metrics.visionAnalysisFallbackReason) {
     messages.push('영상에서 얼굴이나 자세가 충분히 감지되지 않아 시각 분석 일부에 추정값이 사용되었습니다.');
   }
+  if (metrics.expressionLowConfidence || metrics.expressionAnalysisReliable === false) {
+    messages.push('영상에서 얼굴이 충분히 감지되지 않아 표정 점수의 신뢰도가 낮을 수 있습니다. 얼굴이 화면에서 너무 작거나 벗어나지 않도록 정면과 밝은 조명에서 다시 촬영해 보세요.');
+  }
   if (metrics.gestureAnalysisFallback || metrics.gestureAnalysisFallbackReason) {
     messages.push('손과 팔이 화면에 충분히 보이지 않아 제스처 분석 정확도가 낮을 수 있습니다.');
   }
@@ -145,6 +148,10 @@ export default function ResultDetailPage() {
   const seek = useVideoSeek(videoRef);
   const [tab, setTab] = useState('STRENGTH');
   const [videoSrc, setVideoSrc] = useState('');
+
+  useEffect(() => {
+    setTab('STRENGTH');
+  }, [resultId]);
 
   useEffect(() => {
     if (!result?.videoId) return undefined;

@@ -6,9 +6,16 @@ import { getResult } from '../api/resultApi.js';
 export default function useResult(resultId) {
   const [result, setResult] = useState(null);
   useEffect(() => {
-    if (resultId) {
-      getResult(resultId).then(({ data }) => setResult(data.data));
-    }
+    setResult(null);
+    if (!resultId) return undefined;
+
+    const controller = new AbortController();
+    getResult(resultId, { signal: controller.signal })
+      .then(({ data }) => setResult(data.data))
+      .catch((error) => {
+        if (error.code !== 'ERR_CANCELED') setResult(null);
+      });
+    return () => controller.abort();
   }, [resultId]);
   return result;
 }

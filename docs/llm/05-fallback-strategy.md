@@ -45,7 +45,7 @@ faceDetectionRatio = 0.0
 visionAnalysisFallback = true
 ```
 
-`ScoreCalculator.expression_score()`는 fallback 또는 `faceDetectionRatio <= 0.0`인 경우 표정 점수 최고점을 66점으로 제한한다. 따라서 fallback 결과가 실제 landmark 분석보다 유리하게 95~100점으로 포화되지 않는다.
+`ScoreCalculator.expression_score()`는 fallback 또는 `faceDetectionRatio <= 0.0`인 경우 표정 점수 최고점을 60점으로 제한한다. 따라서 fallback 결과가 실제 landmark 분석보다 유리하게 95~100점으로 포화되지 않는다.
 
 ## STT fallback
 

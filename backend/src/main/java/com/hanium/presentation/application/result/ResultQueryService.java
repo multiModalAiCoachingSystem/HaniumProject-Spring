@@ -3,6 +3,7 @@ package com.hanium.presentation.application.result;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hanium.presentation.application.analysis.VideoObservationLocalizationService;
 import com.hanium.presentation.domain.result.entity.FinalAnalysisResult;
 import com.hanium.presentation.domain.result.repository.FinalAnalysisResultRepository;
 import com.hanium.presentation.domain.user.entity.User;
@@ -19,11 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ResultQueryService {
     private final FinalAnalysisResultRepository resultRepository;
     private final ObjectMapper objectMapper;
+    private final VideoObservationLocalizationService observationLocalizationService;
 
     // 함수 역할: ResultQueryService에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
-    public ResultQueryService(FinalAnalysisResultRepository resultRepository, ObjectMapper objectMapper) {
+    public ResultQueryService(FinalAnalysisResultRepository resultRepository, ObjectMapper objectMapper,
+                              VideoObservationLocalizationService observationLocalizationService) {
         this.resultRepository = resultRepository;
         this.objectMapper = objectMapper;
+        this.observationLocalizationService = observationLocalizationService;
     }
 
     // 함수 역할: detailByResultId에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
@@ -61,6 +65,7 @@ public class ResultQueryService {
                     result.getScoresJson(), new TypeReference<List<Map<String, Object>>>() {});
             List<Map<String, Object>> feedback = objectMapper.readValue(
                     result.getFeedbackJson(), new TypeReference<List<Map<String, Object>>>() {});
+            feedback = observationLocalizationService.localize(feedback);
             Map<String, Object> summary = objectMapper.readValue(
                     result.getSummaryJson(), new TypeReference<Map<String, Object>>() {});
             return new ResultDetailResponse(

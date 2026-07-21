@@ -13,6 +13,9 @@ WEIGHTS = {
     "GESTURE": 0.10,
 }
 
+MIN_RELIABLE_FACE_DETECTION_RATIO = 0.10
+MIN_RELIABLE_FACE_DETECTED_FRAMES = 10
+
 
 @dataclass(frozen=True)
 class ScoreItem:
@@ -79,13 +82,20 @@ class ScoreCalculator:
         tense_ratio = float(metrics.get("tenseExpressionRatio", 0.12))
         smile_ratio = float(metrics.get("smileRatio", 0.18))
         face_detection_ratio = float(metrics.get("faceDetectionRatio", 1.0))
+        face_detected_frames = self._optional_float(metrics.get("faceDetectedFrameCount"))
+        face_attempted_frames = self._optional_float(metrics.get("faceAttemptedFrameCount"))
         vision_fallback = self._is_truthy(metrics.get("visionAnalysisFallback", False))
 
-        natural_score = 52.0 + self._clamp(natural_ratio) * 35.0
-        tension_penalty = min(35.0, self._clamp(tense_ratio) * 110.0)
+        natural_score = 52.0 + self._clamp(natural_ratio, 0.0, 1.0) * 35.0
+        tension_penalty = min(35.0, self._clamp(tense_ratio, 0.0, 1.0) * 110.0)
         smile_bonus = self._expression_smile_bonus(smile_ratio)
         raw_score = natural_score - tension_penalty + smile_bonus
-        confidence_cap = self._expression_confidence_cap(face_detection_ratio, vision_fallback)
+        confidence = self._expression_confidence(
+            face_detection_ratio,
+            face_detected_frames,
+            vision_fallback,
+        )
+        confidence_cap = confidence["cap"]
         score = self._clamp(min(raw_score, confidence_cap))
 
         return self._item(
@@ -99,8 +109,14 @@ class ScoreCalculator:
                 "tenseExpressionRatio": tense_ratio,
                 "smileRatio": smile_ratio,
                 "faceDetectionRatio": face_detection_ratio,
+                "faceDetectedFrameCount": face_detected_frames,
+                "faceAttemptedFrameCount": face_attempted_frames,
                 "expressionRawScore": round(raw_score, 1),
                 "expressionConfidenceCap": confidence_cap,
+                "expressionConfidence": confidence["confidence"],
+                "expressionLowConfidence": confidence["lowConfidence"],
+                "expressionAnalysisReliable": confidence["reliable"],
+                "expressionConfidenceReason": confidence["reason"],
                 "expressionFallback": vision_fallback,
             },
         )
@@ -221,16 +237,16 @@ class ScoreCalculator:
             score = float(item["score"])
             category = item["category"]
             name = item["name"]
-            deductions = self._deduction_reasons(category, item.get("metrics", {}))
-            problem_text = " ".join(deductions) if deductions else "전체적으로 안정적인 모습입니다."
-
             if score >= 85:
                 kind = "STRENGTH"
                 title = f"{name} 강점"
+                description = self._strength_description(category)
                 suggestion = self._keep_strength_text(category)
             else:
                 kind = "WEAKNESS"
                 title = f"{name} 개선 필요"
+                deductions = self._deduction_reasons(category, item.get("metrics", {}))
+                description = " ".join(deductions) if deductions else "추가 연습으로 전달력을 높일 수 있습니다."
                 suggestion = self._practice_text(category)
 
             start_seconds, end_seconds = self._representative_window(index, len(scores), duration_seconds)
@@ -242,7 +258,7 @@ class ScoreCalculator:
                     "startSeconds": start_seconds,
                     "endSeconds": end_seconds,
                     "title": title,
-                    "description": problem_text,
+                    "description": description,
                     "suggestion": suggestion,
                 }
             )
@@ -383,14 +399,25 @@ class ScoreCalculator:
 
     # 함수 역할: _keep_strength_text에서 사용자가 볼 강점과 개선점 문구를 구성합니다.
     @staticmethod
+    def _strength_description(category: str) -> str:
+        return {
+            "POSTURE": "전체적으로 안정적인 자세가 관찰되었습니다.",
+            "EXPRESSION": "발표 분위기에 어울리는 자연스러운 표정 흐름이 관찰되었습니다.",
+            "EYE_CONTACT": "청중 또는 카메라를 향한 시선 흐름이 안정적으로 관찰되었습니다.",
+            "VOICE": "발표 내용을 전달하는 발화 흐름이 안정적으로 관찰되었습니다.",
+            "GESTURE": "발표 내용을 보조하는 자연스러운 제스처가 관찰되었습니다.",
+        }.get(category, "발표에서 안정적인 강점이 관찰되었습니다.")
+
+    # 함수 역할: _keep_strength_text에서 사용자가 볼 강점 유지 문구를 구성합니다.
+    @staticmethod
     def _keep_strength_text(category: str) -> str:
         return {
-            "POSTURE": "현재 자세 흐름은 유지하고, 어깨와 상체가 흔들리지 않게 한 번 더 고정해보세요.",
-            "EXPRESSION": "현재 표정 흐름은 유지하고, 핵심 문장 앞뒤에 자연스러운 미소를 조금 더 넣어보세요.",
-            "EYE_CONTACT": "현재 시선 흐름은 유지하고, 문장 끝마다 카메라나 청중을 한 번 더 바라보세요.",
-            "VOICE": "현재 발화 흐름은 유지하고, 핵심 단어 앞뒤에서 속도와 음량을 조금 더 조절해보세요.",
-            "GESTURE": "현재 제스처 흐름은 유지하고, 핵심 문장에서만 손동작을 또렷하게 사용해보세요.",
-        }.get(category, "현재 좋은 흐름은 유지하고, 아쉬운 부분만 한 번 더 다듬어보세요.")
+            "POSTURE": "앞으로의 발표에서도 현재와 같은 안정적인 자세를 유지해 보세요.",
+            "EXPRESSION": "중요한 내용 앞뒤에서도 현재처럼 자연스러운 표정을 유지해 보세요.",
+            "EYE_CONTACT": "핵심 문장을 말할 때 현재와 같은 시선 흐름을 유지해 보세요.",
+            "VOICE": "앞으로의 발표에서도 현재와 같은 안정적인 발화 흐름을 유지해 보세요.",
+            "GESTURE": "강조할 문장에서 현재와 같은 자연스러운 제스처를 유지해 보세요.",
+        }.get(category, "현재의 긍정적인 전달 흐름을 다음 발표에서도 유지해 보세요.")
 
     # 함수 역할: _practice_text에서 분석 엔진에 필요한 데이터 처리 로직을 수행합니다.
     @staticmethod
@@ -417,20 +444,87 @@ class ScoreCalculator:
         return bool(value)
 
     @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _expression_confidence(cls, face_detection_ratio: float, face_detected_frames: float | None,
+                               vision_fallback: bool) -> dict[str, Any]:
+        ratio = cls._clamp(face_detection_ratio, 0.0, 1.0)
+        detected = None if face_detected_frames is None else max(0.0, face_detected_frames)
+
+        if vision_fallback or ratio <= 0.0 or detected == 0.0:
+            return {
+                "cap": 60.0,
+                "confidence": 0.0,
+                "lowConfidence": True,
+                "reliable": False,
+                "reason": "face_not_detected" if not vision_fallback else "vision_fallback",
+            }
+        if ratio < 0.05 or (detected is not None and detected < 5):
+            return {
+                "cap": 60.0,
+                "confidence": 0.25,
+                "lowConfidence": True,
+                "reliable": False,
+                "reason": "very_low_face_detection_ratio",
+            }
+        if ratio < MIN_RELIABLE_FACE_DETECTION_RATIO or (
+            detected is not None and detected < MIN_RELIABLE_FACE_DETECTED_FRAMES
+        ):
+            return {
+                "cap": 70.0,
+                "confidence": 0.40,
+                "lowConfidence": True,
+                "reliable": False,
+                "reason": "low_face_detection_ratio",
+            }
+        if ratio < 0.30:
+            return {
+                "cap": 82.0,
+                "confidence": 0.60,
+                "lowConfidence": True,
+                "reliable": False,
+                "reason": "limited_face_detection_ratio",
+            }
+        if ratio < 0.50:
+            return {
+                "cap": 92.0,
+                "confidence": 0.80,
+                "lowConfidence": False,
+                "reliable": True,
+                "reason": None,
+            }
+        return {
+            "cap": 100.0,
+            "confidence": 1.0,
+            "lowConfidence": False,
+            "reliable": True,
+            "reason": None,
+        }
+
+    @staticmethod
     def _expression_confidence_cap(face_detection_ratio: float, vision_fallback: bool) -> float:
         if vision_fallback or face_detection_ratio <= 0.0:
-            return 66.0
+            return 60.0
         if face_detection_ratio < 0.05:
-            return 82.0
+            return 60.0
+        if face_detection_ratio < MIN_RELIABLE_FACE_DETECTION_RATIO:
+            return 70.0
         if face_detection_ratio < 0.20:
-            return 88.0
+            return 82.0
         if face_detection_ratio < 0.50:
-            return 94.0
+            return 92.0
         return 100.0
 
     @classmethod
     def _expression_smile_bonus(cls, smile_ratio: float) -> float:
-        ratio = cls._clamp(smile_ratio)
+        ratio = cls._clamp(smile_ratio, 0.0, 1.0)
         if ratio < 0.15:
             return ratio / 0.15 * 2.0
         if ratio <= 0.45:

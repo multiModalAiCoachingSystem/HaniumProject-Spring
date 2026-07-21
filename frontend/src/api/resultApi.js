@@ -5,7 +5,7 @@ import httpClient from './httpClient.js';
 export const getResults = () => httpClient.get('/results');
 
 // 함수 역할: getResult에서 필요한 값이나 상태를 조회해 반환합니다.
-export const getResult = (resultId) => httpClient.get(`/results/${resultId}`);
+export const getResult = (resultId, options = {}) => httpClient.get(`/results/${resultId}`, options);
 
 // 함수 역할: deleteResult에서 현재 사용자의 보관함 리포트를 삭제합니다.
 export const deleteResult = (resultId) => httpClient.delete(`/results/${resultId}`);

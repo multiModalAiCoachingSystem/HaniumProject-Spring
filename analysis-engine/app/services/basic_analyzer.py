@@ -43,6 +43,7 @@ class BasicAnalyzer:
         metrics.update(self.gesture.analyze(info.durationSeconds, resolved_video_path))
 
         result = self.score_calculator.calculate(metrics)
+        self._merge_expression_score_metrics(metrics, result)
         self._log_audio_metrics(job_id, info.durationSeconds, metrics)
         self._log_face_detection(job_id, metrics)
         self._log_score_calculation(job_id, metrics, result)
@@ -65,6 +66,25 @@ class BasicAnalyzer:
             "summary": summary,
             "observations": observations,
         }
+
+    @staticmethod
+    def _merge_expression_score_metrics(metrics: dict, result: dict) -> None:
+        for item in result.get("scores", []):
+            if item.get("category") != "EXPRESSION":
+                continue
+            expression_metrics = item.get("metrics") or {}
+            for key in (
+                "expressionRawScore",
+                "expressionConfidence",
+                "expressionConfidenceCap",
+                "expressionLowConfidence",
+                "expressionAnalysisReliable",
+                "expressionConfidenceReason",
+                "expressionFallback",
+            ):
+                if key in expression_metrics:
+                    metrics[key] = expression_metrics[key]
+            return
 
     @staticmethod
     def _log_audio_metrics(job_id: int, duration_seconds: float, metrics: dict) -> None:
@@ -164,6 +184,7 @@ class BasicAnalyzer:
 
     def _log_score_calculation(self, job_id: int, metrics: dict, result: dict) -> None:
         scores = {item.get("category"): item for item in result.get("scores", [])}
+        expression_metrics = scores.get("EXPRESSION", {}).get("metrics", {})
 
         speed = self._safe_float(metrics.get("speechSpeedSpm"), 285.0)
         pause_ratio = self._safe_float(metrics.get("pauseRatio"), 0.08)
@@ -192,6 +213,11 @@ class BasicAnalyzer:
             "fallback:%s "
             "gestureScore=%.1f "
             "expressionRawMetric=naturalRatio:%.3f,tenseRatio:%.3f,smileRatio:%.3f,faceDetectionRatio:%.3f "
+            "expressionRawScore=%.1f "
+            "expressionConfidence=%.2f "
+            "expressionConfidenceCap=%.1f "
+            "expressionLowConfidence=%s "
+            "expressionFallback=%s "
             "expressionScore=%.1f "
             "speechSpeed=%.1f "
             "speechSpeedScore=%.1f "
@@ -222,6 +248,11 @@ class BasicAnalyzer:
             self._safe_float(metrics.get("tenseExpressionRatio"), 0.0),
             self._safe_float(metrics.get("smileRatio"), 0.0),
             self._safe_float(metrics.get("faceDetectionRatio"), 0.0),
+            self._safe_float(expression_metrics.get("expressionRawScore"), 0.0),
+            self._safe_float(expression_metrics.get("expressionConfidence"), 0.0),
+            self._safe_float(expression_metrics.get("expressionConfidenceCap"), 0.0),
+            expression_metrics.get("expressionLowConfidence"),
+            expression_metrics.get("expressionFallback"),
             self._score(scores, "EXPRESSION"),
             speed,
             speech_speed_score,

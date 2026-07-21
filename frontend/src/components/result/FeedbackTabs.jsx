@@ -9,6 +9,7 @@ const CATEGORY_LABELS = {
   POSTURE: '자세',
   EYE_CONTACT: '시선 처리',
   GAZE: '시선 처리',
+  VOICE: '음성',
   GESTURE: '제스처',
   EXPRESSION: '표정',
   VIDEO_QUALITY: '화면 가시성',

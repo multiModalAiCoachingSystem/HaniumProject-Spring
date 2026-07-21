@@ -30,6 +30,37 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+def safeTestRuntimeRoot = providers.provider {
+    def configuredPath = providers.environmentVariable('BACKEND_TEST_RUNTIME_DIR').orNull
+    if (configuredPath != null && !configuredPath.isBlank()) {
+        return file(configuredPath)
+    }
+    return new File(System.getProperty('java.io.tmpdir'), "${rootProject.name}-test-runtime")
+}
+
+tasks.register('syncTestRuntimeClasspath', Sync) {
+    dependsOn tasks.named('testClasses')
+
+    into safeTestRuntimeRoot
+    from(sourceSets.main.output) {
+        into 'main'
+    }
+    from(sourceSets.test.output) {
+        into 'test'
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    dependsOn tasks.named('syncTestRuntimeClasspath')
+
+    def safeMainOutput = safeTestRuntimeRoot.map { new File(it, 'main') }
+    def safeTestOutput = safeTestRuntimeRoot.map { new File(it, 'test') }
+
+    testClassesDirs = files(safeTestOutput)
+    classpath = files(safeTestOutput, safeMainOutput) + configurations.testRuntimeClasspath
+}
+
+tasks.named('clean') {
+    delete safeTestRuntimeRoot
 }

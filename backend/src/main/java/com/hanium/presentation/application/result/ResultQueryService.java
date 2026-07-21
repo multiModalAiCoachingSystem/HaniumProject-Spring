@@ -4,6 +4,7 @@ package com.hanium.presentation.application.result;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hanium.presentation.application.analysis.VideoObservationLocalizationService;
+import com.hanium.presentation.common.util.ApiDateTimes;
 import com.hanium.presentation.domain.result.entity.FinalAnalysisResult;
 import com.hanium.presentation.domain.result.repository.FinalAnalysisResultRepository;
 import com.hanium.presentation.domain.user.entity.User;
@@ -73,7 +74,7 @@ public class ResultQueryService {
                     result.getJob().getId(),
                     result.getVideo().getId(),
                     "발표 분석 결과",
-                    result.getCreatedAt(),
+                    ApiDateTimes.inServiceZone(result.getCreatedAt()),
                     result.getVideo().getOriginalFilename(),
                     result.getVideo().getDurationSeconds(),
                     result.getTotalScore(),

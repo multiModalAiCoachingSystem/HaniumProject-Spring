@@ -9,7 +9,9 @@ x-storage-bind: &storage-bind
 services:
   mysql:
     image: mysql:8.4
+    command: ["--default-time-zone=+09:00"]
     environment:
+      TZ: ${APP_TIME_ZONE:-Asia/Seoul}
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
@@ -94,6 +96,9 @@ services:
       context: ../../backend
       dockerfile: ../infra/docker/backend.Dockerfile
     environment:
+      TZ: ${APP_TIME_ZONE:-Asia/Seoul}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${APP_TIME_ZONE:-Asia/Seoul}
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-Asia/Seoul}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}

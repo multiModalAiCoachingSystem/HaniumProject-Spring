@@ -4,6 +4,7 @@ package com.hanium.presentation.presentation.controller;
 import com.hanium.presentation.application.analysis.AnalysisCommandService;
 import com.hanium.presentation.application.auth.CurrentUserService;
 import com.hanium.presentation.common.util.AnalysisFailureMessages;
+import com.hanium.presentation.common.util.ApiDateTimes;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.analysis.repository.AnalysisJobRepository;
 import com.hanium.presentation.domain.analysis.type.AnalysisStatus;
@@ -174,7 +175,8 @@ public class AdminController {
         row.put("errorMessage", job.getStatus() == AnalysisStatus.FAILED
                 ? AnalysisFailureMessages.safeStoredMessage(job.getErrorMessage())
                 : null);
-        row.put("failedAt", job.getStatus() == AnalysisStatus.FAILED ? job.getCompletedAt() : null);
+        row.put("failedAt", job.getStatus() == AnalysisStatus.FAILED
+                ? ApiDateTimes.inServiceZone(job.getCompletedAt()) : null);
         row.put("elapsedSeconds", elapsedSeconds(job));
         return row;
     }

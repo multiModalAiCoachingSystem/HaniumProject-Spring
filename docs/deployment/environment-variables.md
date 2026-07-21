@@ -12,6 +12,7 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 
 | 변수명 | 사용 위치 | 설명 | 예시값 |
 |---|---|---|---|
+| `APP_TIME_ZONE` | mysql, backend | DB `DATETIME`, JVM, Hibernate, Jackson에서 사용하는 서비스 표준 timezone | `Asia/Seoul` |
 | `HOST_STORAGE_PATH` | Docker bind mount | 호스트의 공유 저장소 경로. 프로젝트 내부 `storage`가 아니라 외부 D 드라이브 경로를 사용한다. | `D:/presentation-coaching-storage` |
 | `STORAGE_ROOT` | backend, analysis-engine, video-llm-engine | 컨테이너 내부 공유 저장소 경로 | `/app/storage` |
 | `HF_HOME` | analysis-engine | Hugging Face 모델 캐시 경로 | `/app/storage/models/huggingface` |
@@ -56,6 +57,15 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `OLLAMA_BASE_URL` | backend, video-llm-engine | Ollama API URL | `http://host.docker.internal:11434` |
 
 `DB_PASSWORD`는 실제 MySQL `presentation` 계정 비밀번호와 같아야 한다. 기존 `mysql-data` 볼륨이 이미 생성된 뒤 `.env`의 `MYSQL_PASSWORD`를 바꿔도 MySQL 계정 비밀번호는 자동 변경되지 않는다.
+
+## 시간 저장 및 표시 정책
+
+- 기존 DB는 timezone 정보가 없는 MySQL `DATETIME` 컬럼에 한국 현지시각을 저장한다.
+- 기존 데이터 호환성을 위해 엔티티는 `LocalDateTime`, DB는 KST wall-clock `DATETIME` 정책을 유지한다.
+- backend JVM, Hibernate JDBC, Jackson, MySQL session은 `Asia/Seoul`로 통일한다.
+- API 응답 DTO는 `OffsetDateTime`을 사용해 `2026-07-21T16:28:00+09:00`처럼 offset을 포함한다.
+- frontend는 API offset을 기준으로 파싱하고 `Intl.DateTimeFormat`의 `Asia/Seoul` timezone으로 표시한다.
+- 기존 DB 값에 `+9시간` 또는 `-9시간` migration을 수행하지 않는다.
 
 ## 저장소 경로 정책
 

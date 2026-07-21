@@ -1,27 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { deleteAnalysisReport, getAnalysisReports, retryAnalysis } from '../api/analysisApi.js';
+import { formatSeoulDateTime } from '../utils/dateTime.js';
 
 const PAGE_SIZE = 10;
 const POLLING_INTERVAL_MS = 4000;
 const ACTIVE_STATUSES = new Set(['QUEUED', 'PROCESSING', 'CANCEL_REQUESTED']);
 const DELETABLE_STATUSES = new Set(['DONE', 'FAILED', 'CANCELED']);
 const RERUN_STATUSES = new Set(['FAILED', 'CANCELED']);
-
-function formatDateTime(value) {
-  if (!value) return '-';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  return date.toLocaleString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function scoreText(report) {
   if (report.status === 'CANCEL_REQUESTED' || report.status === 'CANCELED') return '-';
@@ -349,8 +335,8 @@ export default function ResultListPage() {
                     {statusLabel(report.status)}
                   </span>
                   <span className="score-cell">{scoreText(report)}</span>
-                  <span>{formatDateTime(report.createdAt)}</span>
-                  <span>{formatDateTime(report.completedAt || report.failedAt)}</span>
+                  <span>{formatSeoulDateTime(report.createdAt)}</span>
+                  <span>{formatSeoulDateTime(report.completedAt || report.failedAt)}</span>
                   <div className="row-actions">
                     {report.status === 'DONE' && report.resultId ? (
                       <button

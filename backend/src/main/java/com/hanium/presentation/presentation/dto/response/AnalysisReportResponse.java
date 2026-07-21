@@ -2,10 +2,11 @@
 package com.hanium.presentation.presentation.dto.response;
 
 import com.hanium.presentation.common.util.AnalysisFailureMessages;
+import com.hanium.presentation.common.util.ApiDateTimes;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.analysis.type.AnalysisStatus;
 import com.hanium.presentation.domain.result.entity.FinalAnalysisResult;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 public record AnalysisReportResponse(
         Long jobId,
@@ -15,9 +16,9 @@ public record AnalysisReportResponse(
         String status,
         int retryCount,
         Double totalScore,
-        LocalDateTime createdAt,
-        LocalDateTime completedAt,
-        LocalDateTime failedAt,
+        OffsetDateTime createdAt,
+        OffsetDateTime completedAt,
+        OffsetDateTime failedAt,
         String failureReason
 ) {
     public static AnalysisReportResponse from(AnalysisJob job, FinalAnalysisResult result) {
@@ -32,9 +33,9 @@ public record AnalysisReportResponse(
                 job.getStatus().name(),
                 job.getRetryCount(),
                 score,
-                job.getCreatedAt(),
-                failed ? null : job.getCompletedAt(),
-                failed ? job.getCompletedAt() : null,
+                ApiDateTimes.inServiceZone(job.getCreatedAt()),
+                failed ? null : ApiDateTimes.inServiceZone(job.getCompletedAt()),
+                failed ? ApiDateTimes.inServiceZone(job.getCompletedAt()) : null,
                 failed ? AnalysisFailureMessages.safeStoredMessage(firstPresent(job.getErrorMessage(), job.getMessage())) : null
         );
     }

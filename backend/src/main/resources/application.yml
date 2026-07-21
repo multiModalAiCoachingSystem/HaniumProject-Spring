@@ -7,7 +7,7 @@ spring:
       max-file-size: 500MB
       max-request-size: 510MB
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:presentation_coaching_ai}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:presentation_coaching_ai}?connectionTimeZone=${APP_TIME_ZONE:Asia/Seoul}&characterEncoding=UTF-8
     username: ${DB_USERNAME:presentation}
     password: ${DB_PASSWORD}
   jpa:
@@ -16,6 +16,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          time_zone: ${APP_TIME_ZONE:Asia/Seoul}
+  jackson:
+    time-zone: ${APP_TIME_ZONE:Asia/Seoul}
 
 app:
   storage:

@@ -55,11 +55,10 @@ smileRatio > 0.70          -> 5점에서 점진 감소, 최저 1점
 얼굴 감지율이 낮으면 표정 점수의 신뢰도가 낮다고 보고 최고점을 제한한다. 감지된 일부 프레임이 모두 자연스러워도 전체 영상의 표정이 충분히 분석된 것으로 보지 않는다.
 
 ```text
-visionAnalysisFallback == true or faceDetectionRatio <= 0.0 -> max 60
-faceDetectionRatio < 0.05 or faceDetectedFrameCount < 5 -> max 60
-faceDetectionRatio < 0.10 or faceDetectedFrameCount < 10 -> max 70
-faceDetectionRatio < 0.30 -> max 82
-faceDetectionRatio < 0.50 -> max 92
+visionAnalysisFallback == true or faceDetectionRatio <= 0.0 -> max 50
+faceDetectionRatio < 0.10 or faceDetectedFrameCount < 10 -> max 60
+faceDetectionRatio < 0.30 -> max 70
+faceDetectionRatio < 0.50 -> max 85
 faceDetectionRatio >= 0.50 -> max 100
 ```
 
@@ -68,7 +67,10 @@ faceDetectionRatio >= 0.50 -> max 100
 ```text
 expressionLowConfidence = true
 expressionAnalysisReliable = false
-expressionConfidenceReason = low_face_detection_ratio 또는 very_low_face_detection_ratio
+expressionConfidenceReason = low_face_detection 또는 very_low_face_detection
+expressionDetectionConfidence = 0.0~1.0
+expressionReliabilityLabel = 분석 불가 또는 감지 신뢰도 매우 낮음/낮음/제한됨/정상
+expressionFallbackUsed = true 또는 false
 ```
 
 ## 100점 의미
@@ -89,7 +91,11 @@ faceDetectionRatio = 0.0
 visionAnalysisFallback = true
 ```
 
-fallback인 경우 `expressionScore`는 최대 60점으로 제한된다. fallback 값은 실제 얼굴 landmark 분석보다 유리한 최고점으로 처리하지 않는다.
+fallback인 경우 `expressionScore`는 최대 50점으로 제한된다. fallback 값은 실제 얼굴 landmark 분석보다 유리한 정상 점수로 처리하지 않는다.
+
+## 보정 정책 선택
+
+검토한 대안은 raw 점수에 감지 신뢰도를 곱하는 방식과 감지 구간별 최고점 상한 방식이다. 곱셈 방식은 감지율이 조금만 낮아도 점수가 급격히 떨어지고 기존 결과와 비교하기 어렵다. 현재 구현은 raw metric과 raw 점수를 보존하면서 낮은 검출 근거로 과도한 고득점만 막을 수 있는 구간별 상한 방식을 사용한다. 신뢰도가 낮은 항목을 종합점수에서 제외하고 나머지 가중치를 재정규화하는 방식은 종합점수 의미가 작업마다 달라지므로 적용하지 않는다.
 
 ## 한계
 

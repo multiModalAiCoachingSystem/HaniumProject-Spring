@@ -1,6 +1,7 @@
 import unittest
 
 from app.services.score_calculator import ScoreCalculator
+from app.services.basic_analyzer import BasicAnalyzer
 
 
 class ScoreCalculatorExpressionTest(unittest.TestCase):
@@ -65,7 +66,7 @@ class ScoreCalculatorExpressionTest(unittest.TestCase):
             visionAnalysisFallback=False,
         )
 
-        self.assertEqual(score, 70.0)
+        self.assertEqual(score, 60.0)
 
     def test_very_low_face_detection_is_not_scored_as_excellent(self):
         item = self.expression_item(
@@ -80,7 +81,7 @@ class ScoreCalculatorExpressionTest(unittest.TestCase):
 
         self.assertEqual(item.score, 60.0)
         self.assertEqual(item.metrics["expressionConfidenceCap"], 60.0)
-        self.assertEqual(item.metrics["expressionConfidenceReason"], "very_low_face_detection_ratio")
+        self.assertEqual(item.metrics["expressionConfidenceReason"], "very_low_face_detection")
         self.assertFalse(item.metrics["expressionAnalysisReliable"])
 
     def test_enough_ratio_but_too_few_detected_frames_is_low_confidence(self):
@@ -95,7 +96,7 @@ class ScoreCalculatorExpressionTest(unittest.TestCase):
         )
 
         self.assertEqual(item.score, 60.0)
-        self.assertEqual(item.metrics["expressionConfidenceReason"], "very_low_face_detection_ratio")
+        self.assertEqual(item.metrics["expressionConfidenceReason"], "very_low_face_detection")
         self.assertTrue(item.metrics["expressionLowConfidence"])
 
     def test_ratio_values_are_clamped_to_unit_range(self):
@@ -120,7 +121,104 @@ class ScoreCalculatorExpressionTest(unittest.TestCase):
             visionAnalysisFallback=True,
         )
 
-        self.assertLessEqual(score, 60.0)
+        self.assertLessEqual(score, 50.0)
+
+    def test_high_detection_keeps_raw_expression_and_gaze_scores(self):
+        metrics = {
+            "naturalExpressionRatio": 1.0,
+            "tenseExpressionRatio": 0.0,
+            "smileRatio": 0.4,
+            "faceDetectionRatio": 0.70,
+            "faceDetectedFrameCount": 168,
+            "gazeDetectionRatio": 0.70,
+            "gazeDetectedFrameCount": 168,
+            "eyeContactRatio": 0.8,
+            "visionAnalysisFallback": False,
+        }
+
+        expression = self.calculator.expression_score(metrics)
+        gaze = self.calculator.eye_contact_score(metrics)
+
+        self.assertEqual(expression.score, 91.5)
+        self.assertEqual(gaze.score, 94.5)
+        self.assertTrue(expression.metrics["expressionAnalysisReliable"])
+        self.assertTrue(gaze.metrics["gazeAnalysisReliable"])
+
+    def test_thirty_percent_detection_limits_scores_to_85(self):
+        metrics = {
+            "naturalExpressionRatio": 1.0,
+            "tenseExpressionRatio": 0.0,
+            "smileRatio": 0.4,
+            "faceDetectionRatio": 0.30,
+            "faceDetectedFrameCount": 72,
+            "gazeDetectionRatio": 0.30,
+            "gazeDetectedFrameCount": 72,
+            "eyeContactRatio": 0.8,
+            "visionAnalysisFallback": False,
+        }
+
+        self.assertEqual(self.calculator.expression_score(metrics).score, 85.0)
+        self.assertEqual(self.calculator.eye_contact_score(metrics).score, 85.0)
+
+    def test_very_low_detection_prevents_high_expression_and_gaze_scores(self):
+        metrics = {
+            "naturalExpressionRatio": 1.0,
+            "tenseExpressionRatio": 0.0,
+            "smileRatio": 0.4,
+            "faceDetectionRatio": 0.087,
+            "faceDetectedFrameCount": 21,
+            "faceAttemptedFrameCount": 240,
+            "gazeDetectionRatio": 0.087,
+            "gazeDetectedFrameCount": 21,
+            "gazeAttemptedFrameCount": 240,
+            "eyeContactRatio": 0.762,
+            "visionAnalysisFallback": False,
+        }
+
+        expression = self.calculator.expression_score(metrics)
+        gaze = self.calculator.eye_contact_score(metrics)
+
+        self.assertEqual(expression.score, 60.0)
+        self.assertEqual(gaze.score, 60.0)
+        self.assertEqual(gaze.metrics["eyeContactRawScore"], 93.5)
+        self.assertTrue(expression.metrics["expressionLowConfidence"])
+        self.assertTrue(gaze.metrics["gazeLowConfidence"])
+
+    def test_no_face_detection_uses_conservative_visual_caps(self):
+        metrics = {
+            "faceDetectionRatio": 0.0,
+            "faceDetectedFrameCount": 0,
+            "gazeDetectionRatio": 0.0,
+            "gazeDetectedFrameCount": 0,
+            "eyeContactRatio": 0.68,
+            "visionAnalysisFallback": True,
+        }
+
+        expression = self.calculator.expression_score(metrics)
+        gaze = self.calculator.eye_contact_score(metrics)
+
+        self.assertLessEqual(expression.score, 50.0)
+        self.assertLessEqual(gaze.score, 50.0)
+        self.assertTrue(expression.metrics["expressionFallbackUsed"])
+        self.assertTrue(gaze.metrics["gazeFallbackUsed"])
+
+    def test_visual_reliability_metadata_is_merged_into_response_metrics(self):
+        metrics = {
+            "faceDetectionRatio": 0.087,
+            "faceDetectedFrameCount": 21,
+            "gazeDetectionRatio": 0.087,
+            "gazeDetectedFrameCount": 21,
+            "eyeContactRatio": 0.762,
+            "visionAnalysisFallback": False,
+        }
+        result = self.calculator.calculate(metrics)
+
+        BasicAnalyzer._merge_visual_score_metrics(metrics, result)
+
+        self.assertEqual(metrics["expressionScore"], 60.0)
+        self.assertEqual(metrics["eyeContactScore"], 60.0)
+        self.assertEqual(metrics["expressionDetectionConfidence"], 0.25)
+        self.assertEqual(metrics["gazeDetectionConfidence"], 0.25)
 
     def test_strength_observation_does_not_include_improvement_copy(self):
         observations = self.calculator.observations(

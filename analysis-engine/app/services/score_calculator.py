@@ -15,6 +15,8 @@ WEIGHTS = {
 
 MIN_RELIABLE_FACE_DETECTION_RATIO = 0.10
 MIN_RELIABLE_FACE_DETECTED_FRAMES = 10
+MIN_RELIABLE_GAZE_DETECTION_RATIO = 0.10
+MIN_RELIABLE_GAZE_DETECTED_FRAMES = 10
 
 
 @dataclass(frozen=True)
@@ -114,30 +116,64 @@ class ScoreCalculator:
                 "expressionRawScore": round(raw_score, 1),
                 "expressionConfidenceCap": confidence_cap,
                 "expressionConfidence": confidence["confidence"],
+                "expressionDetectionConfidence": confidence["confidence"],
                 "expressionLowConfidence": confidence["lowConfidence"],
                 "expressionAnalysisReliable": confidence["reliable"],
+                "expressionReliabilityLabel": confidence["label"],
                 "expressionConfidenceReason": confidence["reason"],
                 "expressionFallback": vision_fallback,
+                "expressionFallbackUsed": confidence["fallbackUsed"],
             },
         )
 
     # 함수 역할: eye_contact_score에서 분석 지표를 점수, 등급, 요약 피드백으로 변환합니다.
     def eye_contact_score(self, metrics: dict[str, Any]) -> ScoreItem:
-        ratio = float(metrics.get("eyeContactRatio", 0.68))
+        ratio = self._clamp(float(metrics.get("eyeContactRatio", 0.68)), 0.0, 1.0)
         if ratio >= 0.70:
-            score = 92 + min(8, (ratio - 0.70) * 25)
+            raw_score = 92 + min(8, (ratio - 0.70) * 25)
         elif ratio >= 0.40:
-            score = 70 + (ratio - 0.40) / 0.30 * 18
+            raw_score = 70 + (ratio - 0.40) / 0.30 * 18
         else:
-            score = 45 + ratio / 0.40 * 20
+            raw_score = 45 + ratio / 0.40 * 20
+
+        face_detection_ratio = float(metrics.get("faceDetectionRatio", 1.0))
+        gaze_detection_ratio = float(metrics.get("gazeDetectionRatio", face_detection_ratio))
+        gaze_detected_frames = self._optional_float(
+            metrics.get("gazeDetectedFrameCount", metrics.get("faceDetectedFrameCount"))
+        )
+        gaze_attempted_frames = self._optional_float(
+            metrics.get("gazeAttemptedFrameCount", metrics.get("faceAttemptedFrameCount"))
+        )
+        vision_fallback = self._is_truthy(metrics.get("visionAnalysisFallback", False))
+        confidence = self._visual_detection_confidence(
+            min(face_detection_ratio, gaze_detection_ratio),
+            gaze_detected_frames,
+            vision_fallback,
+            "gaze",
+        )
+        score = self._clamp(min(raw_score, confidence["cap"]))
 
         return self._item(
             "EYE_CONTACT",
             "시선",
-            self._clamp(score),
+            score,
             WEIGHTS["EYE_CONTACT"],
             "카메라 또는 청중 방향 응시 비율을 기준으로 계산했습니다.",
-            {"eyeContactRatio": ratio},
+            {
+                "eyeContactRatio": ratio,
+                "faceDetectionRatio": face_detection_ratio,
+                "gazeDetectionRatio": gaze_detection_ratio,
+                "gazeDetectedFrameCount": gaze_detected_frames,
+                "gazeAttemptedFrameCount": gaze_attempted_frames,
+                "eyeContactRawScore": round(raw_score, 1),
+                "gazeConfidenceCap": confidence["cap"],
+                "gazeDetectionConfidence": confidence["confidence"],
+                "gazeLowConfidence": confidence["lowConfidence"],
+                "gazeAnalysisReliable": confidence["reliable"],
+                "gazeReliabilityLabel": confidence["label"],
+                "gazeConfidenceReason": confidence["reason"],
+                "gazeFallbackUsed": confidence["fallbackUsed"],
+            },
         )
 
     # 함수 역할: voice_score에서 분석 지표를 점수, 등급, 요약 피드백으로 변환합니다.
@@ -455,72 +491,47 @@ class ScoreCalculator:
     @classmethod
     def _expression_confidence(cls, face_detection_ratio: float, face_detected_frames: float | None,
                                vision_fallback: bool) -> dict[str, Any]:
-        ratio = cls._clamp(face_detection_ratio, 0.0, 1.0)
-        detected = None if face_detected_frames is None else max(0.0, face_detected_frames)
+        return cls._visual_detection_confidence(
+            face_detection_ratio,
+            face_detected_frames,
+            vision_fallback,
+            "face",
+        )
 
-        if vision_fallback or ratio <= 0.0 or detected == 0.0:
-            return {
-                "cap": 60.0,
-                "confidence": 0.0,
-                "lowConfidence": True,
-                "reliable": False,
-                "reason": "face_not_detected" if not vision_fallback else "vision_fallback",
-            }
-        if ratio < 0.05 or (detected is not None and detected < 5):
-            return {
-                "cap": 60.0,
-                "confidence": 0.25,
-                "lowConfidence": True,
-                "reliable": False,
-                "reason": "very_low_face_detection_ratio",
-            }
-        if ratio < MIN_RELIABLE_FACE_DETECTION_RATIO or (
-            detected is not None and detected < MIN_RELIABLE_FACE_DETECTED_FRAMES
-        ):
-            return {
-                "cap": 70.0,
-                "confidence": 0.40,
-                "lowConfidence": True,
-                "reliable": False,
-                "reason": "low_face_detection_ratio",
-            }
+    @classmethod
+    def _visual_detection_confidence(cls, detection_ratio: float, detected_frames: float | None,
+                                     fallback_used: bool, metric_name: str) -> dict[str, Any]:
+        ratio = cls._clamp(detection_ratio, 0.0, 1.0)
+        detected = None if detected_frames is None else max(0.0, detected_frames)
+        minimum_ratio = (
+            MIN_RELIABLE_FACE_DETECTION_RATIO if metric_name == "face" else MIN_RELIABLE_GAZE_DETECTION_RATIO
+        )
+        minimum_frames = (
+            MIN_RELIABLE_FACE_DETECTED_FRAMES if metric_name == "face" else MIN_RELIABLE_GAZE_DETECTED_FRAMES
+        )
+
+        if fallback_used or ratio <= 0.0 or detected == 0.0:
+            return cls._confidence_result(50.0, 0.0, True, False, "분석 불가", f"{metric_name}_not_detected", True)
+        if ratio < minimum_ratio or (detected is not None and detected < minimum_frames):
+            return cls._confidence_result(60.0, 0.25, True, False, "감지 신뢰도 매우 낮음", f"very_low_{metric_name}_detection", False)
         if ratio < 0.30:
-            return {
-                "cap": 82.0,
-                "confidence": 0.60,
-                "lowConfidence": True,
-                "reliable": False,
-                "reason": "limited_face_detection_ratio",
-            }
+            return cls._confidence_result(70.0, 0.50, True, False, "감지 신뢰도 낮음", f"low_{metric_name}_detection", False)
         if ratio < 0.50:
-            return {
-                "cap": 92.0,
-                "confidence": 0.80,
-                "lowConfidence": False,
-                "reliable": True,
-                "reason": None,
-            }
-        return {
-            "cap": 100.0,
-            "confidence": 1.0,
-            "lowConfidence": False,
-            "reliable": True,
-            "reason": None,
-        }
+            return cls._confidence_result(85.0, 0.75, False, False, "감지 신뢰도 제한됨", f"limited_{metric_name}_detection", False)
+        return cls._confidence_result(100.0, 1.0, False, True, "감지 신뢰도 정상", None, False)
 
     @staticmethod
-    def _expression_confidence_cap(face_detection_ratio: float, vision_fallback: bool) -> float:
-        if vision_fallback or face_detection_ratio <= 0.0:
-            return 60.0
-        if face_detection_ratio < 0.05:
-            return 60.0
-        if face_detection_ratio < MIN_RELIABLE_FACE_DETECTION_RATIO:
-            return 70.0
-        if face_detection_ratio < 0.20:
-            return 82.0
-        if face_detection_ratio < 0.50:
-            return 92.0
-        return 100.0
+    def _confidence_result(cap: float, confidence: float, low_confidence: bool, reliable: bool,
+                           label: str, reason: str | None, fallback_used: bool) -> dict[str, Any]:
+        return {
+            "cap": cap,
+            "confidence": confidence,
+            "lowConfidence": low_confidence,
+            "reliable": reliable,
+            "label": label,
+            "reason": reason,
+            "fallbackUsed": fallback_used,
+        }
 
     @classmethod
     def _expression_smile_bonus(cls, smile_ratio: float) -> float:

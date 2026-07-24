@@ -9,6 +9,8 @@
 - `eyeContactRatio`: 얼굴이 정면을 향한다고 판단된 face frame 비율
 - `gazeAwayRatio`: `1.0 - eyeContactRatio`
 - `faceDetectionRatio`: 얼굴 랜드마크가 감지된 프레임 비율
+- `gazeDetectionRatio`: 시선 판정 가능한 FaceMesh landmark가 감지된 프레임 비율
+- `gazeDetectedFrameCount`: 시선 판정 가능한 프레임 수
 
 ## 계산식
 
@@ -21,6 +23,8 @@ forward = horizontal_offset <= 0.18 and 0.18 <= vertical_offset <= 0.72
 eyeContactRatio = forward_gaze_frames / face_detected_frames
 ```
 
+현재 시선 판정은 FaceMesh landmark가 감지된 프레임에서 수행하므로 `gazeDetectedFrameCount`는 `faceDetectedFrameCount`와 같고, `gazeDetectionRatio`는 `faceDetectionRatio`와 같다. 별도 eye detector를 사용하는 값으로 오해하지 않아야 한다.
+
 시선 점수:
 
 ```text
@@ -28,6 +32,18 @@ ratio >= 0.70: 92 + min(8, (ratio - 0.70) * 25)
 0.40 <= ratio < 0.70: 70 + (ratio - 0.40) / 0.30 * 18
 ratio < 0.40: 45 + ratio / 0.40 * 20
 ```
+
+위 식의 결과는 `eyeContactRawScore`로 보존한다. 최종 시선 점수는 얼굴·시선 검출 신뢰도에 따른 상한을 적용한다.
+
+```text
+fallback 또는 미검출 -> max 50
+gazeDetectionRatio < 0.10 또는 gazeDetectedFrameCount < 10 -> max 60
+0.10 <= gazeDetectionRatio < 0.30 -> max 70
+0.30 <= gazeDetectionRatio < 0.50 -> max 85
+gazeDetectionRatio >= 0.50 -> 정상 계산
+```
+
+`eyeContactRatio`가 높아도 검출률이 낮으면 일부 프레임만으로 전체 발표를 대표할 수 없으므로 최고점으로 표시하지 않는다. 응답에는 `gazeDetectionConfidence`, `gazeLowConfidence`, `gazeAnalysisReliable`, `gazeReliabilityLabel`, `gazeFallbackUsed`를 함께 기록한다.
 
 ## 기준값
 
@@ -39,7 +55,7 @@ ratio < 0.40: 45 + ratio / 0.40 * 20
 
 ## 예외 처리
 
-얼굴 탐지가 실패하면 fallback으로 `eyeContactRatio=0.68` 또는 긴 발표의 경우 `0.62`를 사용한다.
+얼굴 탐지가 실패하면 fallback으로 `eyeContactRatio=0.68` 또는 긴 발표의 경우 `0.62`를 사용한다. 이 비율은 파이프라인 호환용 기본값이며 실제 검출 결과로 취급하지 않고 최종 점수는 최대 50점으로 제한한다.
 
 ## 한계
 

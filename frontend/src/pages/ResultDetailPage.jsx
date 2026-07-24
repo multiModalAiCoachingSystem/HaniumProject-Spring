@@ -5,6 +5,7 @@ import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } fro
 import FeedbackTabs from '../components/result/FeedbackTabs.jsx';
 import useResult from '../hooks/useResult.js';
 import useVideoSeek from '../hooks/useVideoSeek.js';
+import { visualReliability } from '../utils/visualReliability.js';
 
 const SCORE_ORDER = ['POSTURE', 'EXPRESSION', 'EYE_CONTACT', 'VOICE', 'GESTURE'];
 
@@ -83,6 +84,8 @@ function spmText(value) {
 
 function buildMetricRows(metrics = {}, scores = []) {
   const scoreByCategory = new Map((scores || []).map((score) => [score.category, score.score]));
+  const expressionReliability = visualReliability(metrics, 'EXPRESSION');
+  const gazeReliability = visualReliability(metrics, 'EYE_CONTACT');
   return [
     ['자세', '어깨 기울기', `${round(metrics.shoulderTiltDegrees, 1)}°`],
     ['자세', '고개 움직임', ratioText(metrics.headMovementRatio)],
@@ -92,8 +95,11 @@ function buildMetricRows(metrics = {}, scores = []) {
     ['표정', '자연스러운 표정', ratioText(metrics.naturalExpressionRatio)],
     ['표정', '긴장 표정', ratioText(metrics.tenseExpressionRatio)],
     ['표정', '미소 비율', ratioText(metrics.smileRatio)],
+    ['표정', '분석 신뢰도', expressionReliability.label],
     ['표정', '표정 점수', scoreText(scoreByCategory.get('EXPRESSION'))],
+    ['시선 처리', '랜드마크 감지율', ratioText(metrics.gazeDetectionRatio ?? metrics.faceDetectionRatio)],
     ['시선 처리', '시선 처리 비율', ratioText(metrics.eyeContactRatio)],
+    ['시선 처리', '분석 신뢰도', gazeReliability.label],
     ['시선 처리', '시선 처리 점수', scoreText(scoreByCategory.get('EYE_CONTACT'))],
     ['음성', '말하기 속도', spmText(metrics.speechSpeedSpm)],
     ['음성', '필러 표현 횟수', countText(metrics.fillerWordCount)],
@@ -114,11 +120,16 @@ function buildMetricRows(metrics = {}, scores = []) {
 
 function fallbackMessages(metrics = {}, videoLlmMetadata = {}) {
   const messages = [];
+  const expressionReliability = visualReliability(metrics, 'EXPRESSION');
+  const gazeReliability = visualReliability(metrics, 'EYE_CONTACT');
   if (metrics.visionAnalysisFallback || metrics.visionAnalysisFallbackReason) {
     messages.push('영상에서 얼굴이나 자세가 충분히 감지되지 않아 시각 분석 일부에 추정값이 사용되었습니다.');
   }
-  if (metrics.expressionLowConfidence || metrics.expressionAnalysisReliable === false) {
+  if (expressionReliability.limited || metrics.expressionAnalysisReliable === false) {
     messages.push('영상에서 얼굴이 충분히 감지되지 않아 표정 점수의 신뢰도가 낮을 수 있습니다. 얼굴이 화면에서 너무 작거나 벗어나지 않도록 정면과 밝은 조명에서 다시 촬영해 보세요.');
+  }
+  if (gazeReliability.limited || metrics.gazeAnalysisReliable === false) {
+    messages.push('얼굴과 눈이 충분히 감지되지 않아 시선 분석 정확도가 낮을 수 있습니다. 얼굴이 화면에서 크게 보이도록 정면을 향하고 밝은 조명에서 촬영해 보세요.');
   }
   if (metrics.gestureAnalysisFallback || metrics.gestureAnalysisFallbackReason) {
     messages.push('손과 팔이 화면에 충분히 보이지 않아 제스처 분석 정확도가 낮을 수 있습니다.');
@@ -191,6 +202,10 @@ export default function ResultDetailPage() {
   const videoLlmMetadata = result.videoLlmMetadata || result.summary?.videoLlmMetadata || {};
   const metricRows = buildMetricRows(metrics, scores);
   const fallbackWarnings = fallbackMessages(metrics, videoLlmMetadata);
+  const scoreReliability = {
+    EXPRESSION: visualReliability(metrics, 'EXPRESSION'),
+    EYE_CONTACT: visualReliability(metrics, 'EYE_CONTACT'),
+  };
   const textFeedback = result.summary?.textFeedback || {};
   const feedbackBlocks = textFeedbackBlocks(textFeedback);
   const transcript = result.summary?.transcript || '';
@@ -248,25 +263,36 @@ export default function ResultDetailPage() {
             <h2>{score.name}</h2>
             <strong>{score.score}</strong>
             <p>{score.grade} · {score.summary}</p>
+            {scoreReliability[score.category]?.limited && (
+              <small className="score-reliability">{scoreReliability[score.category].label}</small>
+            )}
           </article>
         ))}
       </div>
 
-      <section className="metric-panel">
-        <div>
-          <p className="section-kicker">Raw Metrics</p>
-          <h2>분석 지표</h2>
-        </div>
-        <div className="metric-grid">
-          {metricRows.map(([group, label, value]) => (
-            <div className="metric-row" key={`${group}-${label}`}>
-              <span>{group}</span>
-              <strong>{label}</strong>
-              <em>{value}</em>
+      {metricRows.length > 0 && (
+        <details className="metric-disclosure" key={resultId}>
+          <summary className="metric-disclosure-toggle">
+            <span className="metric-disclosure-show">상세 분석 지표 보기</span>
+            <span className="metric-disclosure-hide">상세 분석 지표 숨기기</span>
+          </summary>
+          <section className="metric-panel">
+            <div>
+              <p className="section-kicker">Raw Metrics</p>
+              <h2>상세 분석 지표</h2>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="metric-grid">
+              {metricRows.map(([group, label, value]) => (
+                <div className="metric-row" key={`${group}-${label}`}>
+                  <span>{group}</span>
+                  <strong>{label}</strong>
+                  <em>{value}</em>
+                </div>
+              ))}
+            </div>
+          </section>
+        </details>
+      )}
 
       {(textFeedback.presentationSummary || textFeedback.overallFeedback || feedbackBlocks.actions.length > 0) && (
         <section className="text-feedback-panel">

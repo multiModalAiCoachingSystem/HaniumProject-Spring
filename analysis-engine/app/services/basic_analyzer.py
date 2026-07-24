@@ -43,9 +43,10 @@ class BasicAnalyzer:
         metrics.update(self.gesture.analyze(info.durationSeconds, resolved_video_path))
 
         result = self.score_calculator.calculate(metrics)
-        self._merge_expression_score_metrics(metrics, result)
+        self._merge_visual_score_metrics(metrics, result)
         self._log_audio_metrics(job_id, info.durationSeconds, metrics)
         self._log_face_detection(job_id, metrics)
+        self._log_visual_score_reliability(job_id, metrics)
         self._log_score_calculation(job_id, metrics, result)
         observations = self.score_calculator.observations(result["scores"], info.durationSeconds)
         stt_payload = stt_result.to_dict()
@@ -68,23 +69,40 @@ class BasicAnalyzer:
         }
 
     @staticmethod
-    def _merge_expression_score_metrics(metrics: dict, result: dict) -> None:
+    def _merge_visual_score_metrics(metrics: dict, result: dict) -> None:
         for item in result.get("scores", []):
-            if item.get("category") != "EXPRESSION":
+            category = item.get("category")
+            if category not in {"EXPRESSION", "EYE_CONTACT"}:
                 continue
-            expression_metrics = item.get("metrics") or {}
-            for key in (
+            score_metrics = item.get("metrics") or {}
+            keys = (
                 "expressionRawScore",
                 "expressionConfidence",
+                "expressionDetectionConfidence",
                 "expressionConfidenceCap",
                 "expressionLowConfidence",
                 "expressionAnalysisReliable",
+                "expressionReliabilityLabel",
                 "expressionConfidenceReason",
                 "expressionFallback",
-            ):
-                if key in expression_metrics:
-                    metrics[key] = expression_metrics[key]
-            return
+                "expressionFallbackUsed",
+            ) if category == "EXPRESSION" else (
+                "eyeContactRawScore",
+                "gazeConfidenceCap",
+                "gazeDetectionConfidence",
+                "gazeLowConfidence",
+                "gazeAnalysisReliable",
+                "gazeReliabilityLabel",
+                "gazeConfidenceReason",
+                "gazeFallbackUsed",
+            )
+            for key in keys:
+                if key in score_metrics:
+                    metrics[key] = score_metrics[key]
+            if category == "EXPRESSION":
+                metrics["expressionScore"] = item.get("score")
+            else:
+                metrics["eyeContactScore"] = item.get("score")
 
     @staticmethod
     def _log_audio_metrics(job_id: int, duration_seconds: float, metrics: dict) -> None:
@@ -181,6 +199,32 @@ class BasicAnalyzer:
                 job_id,
                 attempted,
             )
+
+    @staticmethod
+    def _log_visual_score_reliability(job_id: int, metrics: dict) -> None:
+        logger.info(
+            "Visual score reliability: "
+            "jobId=%s "
+            "attemptedFaceFrames=%s detectedFaceFrames=%s faceDetectionRatio=%.3f "
+            "rawExpressionScore=%.1f finalExpressionScore=%.1f "
+            "attemptedGazeFrames=%s detectedGazeFrames=%s gazeDetectionRatio=%.3f "
+            "eyeContactRatio=%.3f rawEyeContactScore=%.1f finalEyeContactScore=%.1f "
+            "expressionLowConfidence=%s gazeLowConfidence=%s",
+            job_id,
+            metrics.get("faceAttemptedFrameCount"),
+            metrics.get("faceDetectedFrameCount"),
+            BasicAnalyzer._safe_float(metrics.get("faceDetectionRatio"), 0.0),
+            BasicAnalyzer._safe_float(metrics.get("expressionRawScore"), 0.0),
+            BasicAnalyzer._safe_float(metrics.get("expressionScore"), 0.0),
+            metrics.get("gazeAttemptedFrameCount"),
+            metrics.get("gazeDetectedFrameCount"),
+            BasicAnalyzer._safe_float(metrics.get("gazeDetectionRatio"), 0.0),
+            BasicAnalyzer._safe_float(metrics.get("eyeContactRatio"), 0.0),
+            BasicAnalyzer._safe_float(metrics.get("eyeContactRawScore"), 0.0),
+            BasicAnalyzer._safe_float(metrics.get("eyeContactScore"), 0.0),
+            metrics.get("expressionLowConfidence"),
+            metrics.get("gazeLowConfidence"),
+        )
 
     def _log_score_calculation(self, job_id: int, metrics: dict, result: dict) -> None:
         scores = {item.get("category"): item for item in result.get("scores", [])}

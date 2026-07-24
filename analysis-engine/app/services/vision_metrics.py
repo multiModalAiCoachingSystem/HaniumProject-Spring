@@ -58,6 +58,12 @@ FALLBACK_METRICS = {
     "visionFrameCount": 0,
     "poseDetectionRatio": 0.0,
     "faceDetectionRatio": 0.0,
+    "faceAttemptedFrameCount": 0,
+    "faceDetectedFrameCount": 0,
+    "gazeAttemptedFrameCount": 0,
+    "gazeDetectedFrameCount": 0,
+    "gazeDetectionRatio": 0.0,
+    "eyeContactFrameCount": 0,
     "visionAnalysisFallback": True,
 }
 
@@ -451,6 +457,11 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
         "faceCropRetryAttemptedCount": crop_retry_attempted,
         "faceCropRetryDetectedCount": crop_retry_detected,
         "faceDetectedFrameCount": face_detected,
+        # 시선 판정은 FaceMesh landmark가 있는 프레임에서만 수행한다.
+        "gazeAttemptedFrameCount": face_attempted,
+        "gazeDetectedFrameCount": face_detected,
+        "gazeDetectionRatio": round(face_detected / face_attempted, 3) if face_attempted else 0.0,
+        "eyeContactFrameCount": forward_gaze,
         "faceInputWidth": face_input_width,
         "faceInputHeight": face_input_height,
         "faceCropRetryEnabled": FACE_CROP_RETRY_ENABLED,

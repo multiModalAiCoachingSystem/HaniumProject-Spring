@@ -1459,6 +1459,14 @@ h3 {
   font-size: 38px;
 }
 
+.score-reliability {
+  display: block;
+  margin-top: 10px;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 760;
+}
+
 .result-layout {
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
 }
@@ -1520,6 +1528,53 @@ h3 {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.metric-disclosure {
+  display: grid;
+  gap: 12px;
+}
+
+.metric-disclosure-toggle {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 11px 14px;
+  font-weight: 780;
+  cursor: pointer;
+  user-select: none;
+}
+
+.metric-disclosure-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.metric-disclosure-toggle::marker {
+  content: '';
+}
+
+.metric-disclosure-toggle:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.metric-disclosure-toggle:focus-visible {
+  outline: 3px solid #bfdbfe;
+  outline-offset: 2px;
+}
+
+.metric-disclosure-hide {
+  display: none;
+}
+
+.metric-disclosure[open] .metric-disclosure-show {
+  display: none;
+}
+
+.metric-disclosure[open] .metric-disclosure-hide {
+  display: inline;
 }
 
 .metric-grid {
@@ -1614,6 +1669,13 @@ h3 {
 
   .report-board .row-actions {
     width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .metric-disclosure-toggle {
+    width: 100%;
+    text-align: center;
   }
 }
 

@@ -71,9 +71,33 @@ public class AnalysisPipelineService {
     @Async("analysisTaskExecutor")
     public void runAnalysis(Long jobId) {
         try {
-            if (stopIfCancellationRequested(jobId)) return;
+            if (!claimQueuedForProcessing(jobId)) {
+                log.info("Analysis execution skipped because job was not claimable. jobId={}", jobId);
+                return;
+            }
+        } catch (RuntimeException exception) {
+            log.warn("Analysis claim failed. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
+            return;
+        }
+        executeAnalysis(jobId);
+    }
 
-            if (!update(jobId, AnalysisStep.PREPROCESSING, 10, "영상 분석을 준비하고 있습니다.")) return;
+    @Async("analysisTaskExecutor")
+    public void runRecoveredAnalysis(Long jobId) {
+        try {
+            if (!isRecoveredJobRunnable(jobId)) {
+                log.info("Recovered analysis execution skipped because status changed. jobId={}", jobId);
+                return;
+            }
+        } catch (RuntimeException exception) {
+            log.warn("Recovered analysis validation failed. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
+            return;
+        }
+        executeAnalysis(jobId);
+    }
+
+    private void executeAnalysis(Long jobId) {
+        try {
             if (stopIfCancellationRequested(jobId)) return;
 
             AnalysisJob job = loadJobWithVideoAndUser(jobId);
@@ -120,6 +144,17 @@ public class AnalysisPipelineService {
         }
     }
 
+    boolean claimQueuedForProcessing(Long jobId) {
+        return inTransaction(() -> analysisJobRepository.claimQueuedForProcessing(jobId) == 1);
+    }
+
+    boolean isRecoveredJobRunnable(Long jobId) {
+        return inTransaction(() -> analysisJobRepository.findByIdForUpdate(jobId)
+                .map(job -> job.getStatus() == AnalysisStatus.PROCESSING
+                        || job.getStatus() == AnalysisStatus.CANCEL_REQUESTED)
+                .orElse(false));
+    }
+
     AnalysisJob loadJobWithVideoAndUser(Long jobId) {
         return analysisJobRepository.findByIdWithVideoAndUser(jobId).orElseThrow();
     }
@@ -128,6 +163,9 @@ public class AnalysisPipelineService {
         return inTransaction(() -> {
             AnalysisJob job = analysisJobRepository.findByIdForUpdate(jobId).orElseThrow();
             if (applyCancellationIfNeeded(job)) {
+                return false;
+            }
+            if (job.getStatus() != AnalysisStatus.PROCESSING) {
                 return false;
             }
             boolean updated = job.processing(step, progress, message);
@@ -143,6 +181,9 @@ public class AnalysisPipelineService {
         return inTransaction(() -> {
             AnalysisJob job = analysisJobRepository.findByIdWithVideoAndUserForUpdate(jobId).orElseThrow();
             if (applyCancellationIfNeeded(job)) {
+                return false;
+            }
+            if (job.getStatus() != AnalysisStatus.PROCESSING) {
                 return false;
             }
 
@@ -174,6 +215,9 @@ public class AnalysisPipelineService {
             if (applyCancellationIfNeeded(job)) {
                 return false;
             }
+            if (job.getStatus() != AnalysisStatus.PROCESSING) {
+                return false;
+            }
             boolean completed = job.done();
             if (completed) {
                 analysisJobRepository.save(job);
@@ -186,6 +230,9 @@ public class AnalysisPipelineService {
         inTransaction(() -> {
             analysisJobRepository.findByIdForUpdate(jobId).ifPresent(job -> {
                 if (applyCancellationIfNeeded(job)) {
+                    return;
+                }
+                if (job.getStatus() != AnalysisStatus.PROCESSING) {
                     return;
                 }
                 if (job.fail(message)) {

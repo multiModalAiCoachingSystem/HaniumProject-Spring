@@ -51,6 +51,9 @@
 | `step` | VARCHAR(40), NOT NULL | `AnalysisStep` |
 | `progress_percent` | INT, NOT NULL | 진행률 |
 | `retry_count` | INT, NOT NULL | 재시도 횟수 |
+| `recovery_attempt_count` | INT, NOT NULL | backend 재시작 자동 복구 시도 횟수 |
+| `last_recovery_at` | DATETIME, NULL | 마지막 자동 복구 시각 |
+| `last_recovery_reason` | VARCHAR(80), NULL | `STARTUP_QUEUED` 등 내부 복구 사유 코드 |
 | `message` | VARCHAR(500), NULL | 사용자 표시 메시지 |
 | `error_message` | VARCHAR(500), NULL | 안전한 실패 메시지 |
 | `created_at` | DATETIME, NOT NULL, updatable=false | 생성 시각 |
@@ -79,3 +82,7 @@
 ## JSON/LONGTEXT 컬럼
 
 `scores_json`, `feedback_json`, `summary_json`은 JPA에서 `@Lob` 및 `columnDefinition = "LONGTEXT"`로 선언되어 있다. API 응답 시 `ObjectMapper`로 다시 `List<Map<String,Object>>` 또는 `Map<String,Object>`로 파싱한다.
+
+기존 MySQL 볼륨에는 `infra/mysql/migrations/20260724_add_analysis_recovery_columns.sql`을 적용한다.
+기본 Docker 개발 프로필은 Hibernate `ddl-auto=update`로 컬럼을 추가하지만, `prod` 프로필은
+`ddl-auto=validate`이므로 migration을 먼저 실행해야 한다.

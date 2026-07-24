@@ -48,6 +48,14 @@ public class AnalysisJob {
     @Column(nullable = false)
     private int retryCount;
 
+    @Column(nullable = false)
+    private int recoveryAttemptCount;
+
+    private LocalDateTime lastRecoveryAt;
+
+    @Column(length = 80)
+    private String lastRecoveryReason;
+
     @Column(length = 500)
     private String message;
 
@@ -73,6 +81,7 @@ public class AnalysisJob {
         this.step = AnalysisStep.QUEUED;
         this.progressPercent = 0;
         this.retryCount = 0;
+        this.recoveryAttemptCount = 0;
         this.message = "분석 대기 중입니다.";
     }
 
@@ -89,7 +98,7 @@ public class AnalysisJob {
     }
 
     public boolean processing(AnalysisStep step, int progressPercent, String message) {
-        if (isCancellationStatus()) {
+        if (this.status != AnalysisStatus.QUEUED && this.status != AnalysisStatus.PROCESSING) {
             return false;
         }
         if (startedAt == null) {
@@ -152,6 +161,9 @@ public class AnalysisJob {
         this.errorMessage = null;
         this.startedAt = null;
         this.completedAt = null;
+        this.recoveryAttemptCount = 0;
+        this.lastRecoveryAt = null;
+        this.lastRecoveryReason = null;
     }
 
     public Long getId() { return id; }
@@ -161,6 +173,9 @@ public class AnalysisJob {
     public AnalysisStep getStep() { return step; }
     public int getProgressPercent() { return progressPercent; }
     public int getRetryCount() { return retryCount; }
+    public int getRecoveryAttemptCount() { return recoveryAttemptCount; }
+    public LocalDateTime getLastRecoveryAt() { return lastRecoveryAt; }
+    public String getLastRecoveryReason() { return lastRecoveryReason; }
     public String getMessage() { return message; }
     public String getErrorMessage() { return errorMessage; }
     public LocalDateTime getCreatedAt() { return createdAt; }

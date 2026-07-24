@@ -216,17 +216,67 @@ def _prepare_face_crop(cv2: Any, crop_bgr: Any) -> Any:
     return cv2.resize(crop_bgr, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_CUBIC)
 
 
-def _detect_face_landmarks(cv2: Any, face_detector: Any, frame_bgr: Any, frame_rgb: Any) -> tuple[Any | None, bool, bool]:
+def _face_landmark_box_ratio(face_landmarks: Any) -> float | None:
+    points = [
+        (float(landmark.x), float(landmark.y))
+        for landmark in face_landmarks.landmark
+        if math.isfinite(float(landmark.x)) and math.isfinite(float(landmark.y))
+    ]
+    if not points:
+        return None
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    width = _clamp(max(xs) - min(xs))
+    height = _clamp(max(ys) - min(ys))
+    return _clamp(width * height)
+
+
+def _face_box_ratio(frame_bgr: Any, box: tuple[int, int, int, int]) -> float | None:
+    height, width = frame_bgr.shape[:2]
+    if width <= 0 or height <= 0:
+        return None
+    _, _, box_width, box_height = box
+    return _clamp((box_width * box_height) / float(width * height))
+
+
+def _create_face_detector(mp: Any) -> Any:
+    # Frames are sampled with random seeks, so each frame must be detected independently.
+    return mp.solutions.face_mesh.FaceMesh(
+        static_image_mode=True,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=FACE_DETECTION_CONFIDENCE,
+        min_tracking_confidence=FACE_TRACKING_CONFIDENCE,
+    )
+
+
+def _enable_auto_orientation(cv2: Any, capture: Any) -> bool:
+    property_id = getattr(cv2, "CAP_PROP_ORIENTATION_AUTO", None)
+    if property_id is None:
+        return False
+    try:
+        return bool(capture.set(property_id, 1))
+    except Exception:
+        return False
+
+
+def _detect_face_landmarks(
+    cv2: Any,
+    face_detector: Any,
+    frame_bgr: Any,
+    frame_rgb: Any,
+) -> tuple[Any | None, bool, bool, float | None]:
     full_result = face_detector.process(frame_rgb)
     if full_result.multi_face_landmarks:
-        return full_result.multi_face_landmarks[0], False, False
+        landmarks = full_result.multi_face_landmarks[0]
+        return landmarks, False, False, _face_landmark_box_ratio(landmarks)
 
     if not FACE_CROP_RETRY_ENABLED:
-        return None, False, False
+        return None, False, False, None
 
     boxes = _detect_face_boxes(cv2, frame_bgr)
     if not boxes:
-        return None, False, False
+        return None, False, False, None
 
     for box in boxes[:3]:
         crop = _crop_with_padding(frame_bgr, box)
@@ -236,9 +286,9 @@ def _detect_face_landmarks(cv2: Any, face_detector: Any, frame_bgr: Any, frame_r
         crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         crop_result = face_detector.process(crop_rgb)
         if crop_result.multi_face_landmarks:
-            return crop_result.multi_face_landmarks[0], True, True
+            return crop_result.multi_face_landmarks[0], True, True, _face_box_ratio(frame_bgr, box)
 
-    return None, True, False
+    return None, True, False, None
 
 
 # 함수 역할: 프레임 분석을 실행할 수 없을 때 사용할 일관된 대체값을 생성합니다.
@@ -273,6 +323,7 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
     cap = cv2.VideoCapture(file_path)
     if not cap.isOpened():
         return _fallback(duration_seconds, "video_open_failed")
+    orientation_auto_enabled = _enable_auto_orientation(cv2, cap)
 
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -293,14 +344,10 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
         min_detection_confidence=0.45,
         min_tracking_confidence=0.45,
     )
-    face_detector = mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=FACE_DETECTION_CONFIDENCE,
-        min_tracking_confidence=FACE_TRACKING_CONFIDENCE,
-    )
+    face_detector = _create_face_detector(mp)
 
+    read_attempted = 0
+    read_failed = 0
     sampled = 0
     pose_detected = 0
     face_detected = 0
@@ -316,16 +363,23 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
     shoulder_tilts: list[float] = []
     nose_positions: list[tuple[float, float]] = []
     movements: list[float] = []
+    face_box_ratios: list[float] = []
     face_input_width = 0
     face_input_height = 0
     first_frame_index: int | None = None
     first_frame_brightness: float | None = None
+    orientation_meta = 0.0
+    orientation_property = getattr(cv2, "CAP_PROP_ORIENTATION_META", None)
+    if orientation_property is not None:
+        orientation_meta = float(cap.get(orientation_property) or 0.0)
 
     try:
         for frame_index in range(0, frame_count, step):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            read_attempted += 1
             ok, frame = cap.read()
             if not ok:
+                read_failed += 1
                 continue
 
             sampled += 1
@@ -337,7 +391,7 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
                 first_frame_brightness = float(face_frame.mean())
             face_rgb = cv2.cvtColor(face_frame, cv2.COLOR_BGR2RGB)
             face_attempted += 1
-            face_landmarks, crop_attempted, crop_detected = _detect_face_landmarks(
+            face_landmarks, crop_attempted, crop_detected, face_box_ratio = _detect_face_landmarks(
                 cv2,
                 face_detector,
                 face_frame,
@@ -347,6 +401,8 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
                 crop_retry_attempted += 1
             if crop_detected:
                 crop_retry_detected += 1
+            if face_box_ratio is not None:
+                face_box_ratios.append(face_box_ratio)
 
             tilt: float | None = None
             movement = 0.0
@@ -450,6 +506,8 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
             "anxious": round(anxious_ratio, 3),
         },
         "visionFrameCount": sampled,
+        "visionAttemptedFrameCount": read_attempted,
+        "visionReadFailureCount": read_failed,
         "poseDetectionRatio": round(pose_detected / sampled, 3),
         "faceDetectionRatio": round(face_detected / face_attempted, 3) if face_attempted else 0.0,
         "faceAttemptedFrameCount": face_attempted,
@@ -457,6 +515,9 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
         "faceCropRetryAttemptedCount": crop_retry_attempted,
         "faceCropRetryDetectedCount": crop_retry_detected,
         "faceDetectedFrameCount": face_detected,
+        "faceBoxRatioMin": round(min(face_box_ratios), 4) if face_box_ratios else None,
+        "faceBoxRatioAverage": round(mean(face_box_ratios), 4) if face_box_ratios else None,
+        "faceBoxRatioMax": round(max(face_box_ratios), 4) if face_box_ratios else None,
         # 시선 판정은 FaceMesh landmark가 있는 프레임에서만 수행한다.
         "gazeAttemptedFrameCount": face_attempted,
         "gazeDetectedFrameCount": face_detected,
@@ -464,6 +525,8 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
         "eyeContactFrameCount": forward_gaze,
         "faceInputWidth": face_input_width,
         "faceInputHeight": face_input_height,
+        "videoRotationDegrees": round(orientation_meta, 1),
+        "videoOrientationAutoEnabled": orientation_auto_enabled,
         "faceCropRetryEnabled": FACE_CROP_RETRY_ENABLED,
         "visionAnalysisFallback": False,
     }

@@ -2,6 +2,7 @@ package com.hanium.presentation.application.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -58,6 +59,7 @@ class AnalysisPipelineServiceTest {
     @Test
     void runAnalysisCompletesQueuedJobAsDoneAndSavesFinalResult() throws Exception {
         AnalysisJob job = queuedJob();
+        allowClaim(job);
         when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
@@ -81,6 +83,7 @@ class AnalysisPipelineServiceTest {
     @Test
     void videoLlmEnglishObservationKeepsRawTextAndAddsKoreanDisplayFields() throws Exception {
         AnalysisJob job = queuedJob();
+        allowClaim(job);
         when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
@@ -108,6 +111,7 @@ class AnalysisPipelineServiceTest {
     @Test
     void analysisEngineFailureMarksJobFailed() {
         AnalysisJob job = queuedJob();
+        allowClaim(job);
         when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
         when(analysisEngineClient.analyze(any())).thenThrow(new RuntimeException("analysis-engine unavailable"));
@@ -122,6 +126,7 @@ class AnalysisPipelineServiceTest {
     @Test
     void videoLlmEngineFailureMarksJobFailedWithoutSavingFinalResult() {
         AnalysisJob job = queuedJob();
+        allowClaim(job);
         when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
         when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
         when(analysisEngineClient.analyze(any())).thenReturn(basicResponse(job));
@@ -179,7 +184,7 @@ class AnalysisPipelineServiceTest {
 
     @Test
     void saveEngineResultReplacesExistingResultForSameJobBeforeSavingLatestValues() throws Exception {
-        AnalysisJob job = queuedJob();
+        AnalysisJob job = processingJob();
         FinalAnalysisResult existing = new FinalAnalysisResult(job, 11.0, "[]", "[]", "{}");
         ReflectionTestUtils.setField(existing, "id", 77L);
         when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
@@ -196,6 +201,59 @@ class AnalysisPipelineServiceTest {
         assertThat(savedResult.getTotalScore()).isEqualTo(77.5);
         Map<String, Object> summary = objectMapper.readValue(savedResult.getSummaryJson(), Map.class);
         assertThat(summary).containsEntry("totalScore", 77.5);
+    }
+
+    @Test
+    void duplicateRunAnalysisExecutesExternalEnginesOnlyOnce() {
+        AnalysisJob job = queuedJob();
+        doAnswer(invocation -> {
+            job.processing(com.hanium.presentation.domain.analysis.type.AnalysisStep.PREPROCESSING, 10, "claimed");
+            return 1;
+        }).doReturn(0).when(analysisJobRepository).claimQueuedForProcessing(job.getId());
+        when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
+        when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
+        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
+        when(resultRepository.findByJobId(job.getId())).thenReturn(Optional.empty());
+        when(analysisEngineClient.analyze(any())).thenReturn(basicResponse(job));
+        when(videoLlmEngineClient.analyze(any())).thenReturn(videoLlmResponse(job));
+        when(textFeedbackService.generate(any(), any(), any())).thenReturn(textFeedback());
+
+        pipelineService.runAnalysis(job.getId());
+        pipelineService.runAnalysis(job.getId());
+
+        verify(analysisEngineClient).analyze(any());
+        verify(videoLlmEngineClient).analyze(any());
+    }
+
+    @Test
+    void unclaimableFinishedJobDoesNotStartExternalAnalysis() {
+        when(analysisJobRepository.claimQueuedForProcessing(100L)).thenReturn(0);
+
+        pipelineService.runAnalysis(100L);
+
+        verify(analysisEngineClient, never()).analyze(any());
+        verify(videoLlmEngineClient, never()).analyze(any());
+    }
+
+    @Test
+    void recoveredJobCancelledBeforeExecutionDoesNotCallExternalEngines() {
+        AnalysisJob job = processingJob();
+        job.requestCancel();
+        when(analysisJobRepository.findByIdForUpdate(job.getId())).thenReturn(Optional.of(job));
+
+        pipelineService.runRecoveredAnalysis(job.getId());
+
+        assertThat(job.getStatus()).isEqualTo(AnalysisStatus.CANCELED);
+        verify(analysisEngineClient, never()).analyze(any());
+        verify(videoLlmEngineClient, never()).analyze(any());
+        verify(resultRepository).deleteByJobId(job.getId());
+    }
+
+    private void allowClaim(AnalysisJob job) {
+        when(analysisJobRepository.claimQueuedForProcessing(job.getId())).thenAnswer(invocation -> {
+            job.processing(com.hanium.presentation.domain.analysis.type.AnalysisStep.PREPROCESSING, 10, "claimed");
+            return 1;
+        });
     }
 
     private AnalysisJob queuedJob() {

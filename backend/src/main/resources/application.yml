@@ -26,6 +26,8 @@ app:
     root: ${STORAGE_ROOT:/app/storage}
   analysis-engine:
     base-url: ${ANALYSIS_ENGINE_BASE_URL:http://localhost:8001}
+  analysis-recovery:
+    max-attempts: ${ANALYSIS_RECOVERY_MAX_ATTEMPTS:3}
   video-llm-engine:
     base-url: ${VIDEO_LLM_ENGINE_BASE_URL:http://localhost:8002}
   text-llm:

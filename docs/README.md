@@ -40,6 +40,7 @@
 | deployment | [외부 접속](deployment/external-access.md) | nginx, 포트, 외부 접근 구조 | 작성 완료 |
 | security | [비밀정보 관리](security/secret-management.md) | secret 처리 원칙과 주의점 | 작성 완료 |
 | testing | [테스트 시나리오](testing/test-scenarios.md) | 자동/수동 테스트 기준 | 작성 완료 |
+| testing | [실제 영상 시각 분석 회귀 테스트](testing/vision-regression-test.md) | 얼굴·시선·제스처 실영상 기준값과 알려진 한계 | 작성 완료 |
 | troubleshooting | [자주 발생하는 오류](troubleshooting/common-errors.md) | 운영 중 흔한 문제와 확인 위치 | 작성 완료 |
 
 ## 작성 기준

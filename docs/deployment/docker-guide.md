@@ -83,3 +83,18 @@ docker inspect presentation-coaching-ai-video-llm-engine-1 --format '{{range .Mo
 MySQL 컨테이너가 처음 실행될 때 `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `DB_NAME`, `DB_USERNAME`으로 초기 계정과 DB를 만든다. 이미 `mysql-data` 볼륨이 있으면 `.env` 값을 바꿔도 기존 DB 계정 비밀번호는 자동 변경되지 않는다.
 
 데이터를 보존해야 하는 경우 `mysql-data` 볼륨을 삭제하지 않는다.
+
+## 8. 분석 복구 컬럼
+
+기존 MySQL 볼륨을 `spring.profiles.active=prod`로 실행하기 전에는 다음 migration을 한 번 적용한다.
+
+`infra/mysql/migrations/20260724_add_analysis_recovery_columns.sql`
+
+기본 Docker 개발 설정은 `ddl-auto=update`이므로 backend 최초 재기동 시 같은 컬럼을 자동으로 추가한다.
+migration은 컬럼 존재 여부를 확인하므로 중복 실행해도 기존 컬럼이나 분석 결과를 삭제하지 않는다.
+
+backend 시작 로그의 다음 숫자로 복구 대상 수를 확인할 수 있다.
+
+```text
+Backend recovery started: queuedCount=0 processingCount=0 cancelRequestedCount=0
+```

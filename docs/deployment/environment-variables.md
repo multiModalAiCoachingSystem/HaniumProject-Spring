@@ -15,6 +15,7 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `APP_TIME_ZONE` | mysql, backend | DB `DATETIME`, JVM, Hibernate, Jackson에서 사용하는 서비스 표준 timezone | `Asia/Seoul` |
 | `HOST_STORAGE_PATH` | Docker bind mount | 호스트의 공유 저장소 경로. 프로젝트 내부 `storage`가 아니라 외부 D 드라이브 경로를 사용한다. | `D:/presentation-coaching-storage` |
 | `STORAGE_ROOT` | backend, analysis-engine, video-llm-engine | 컨테이너 내부 공유 저장소 경로 | `/app/storage` |
+| `ANALYSIS_RECOVERY_MAX_ATTEMPTS` | backend | backend 재시작 시 job 자동 복구 최대 횟수 | `3` |
 | `HF_HOME` | analysis-engine | Hugging Face 모델 캐시 경로 | `/app/storage/models/huggingface` |
 | `DB_NAME` | mysql, backend | MySQL 데이터베이스 이름 | `presentation_coaching_ai` |
 | `DB_USERNAME` | mysql, backend | MySQL 애플리케이션 계정 | `presentation` |

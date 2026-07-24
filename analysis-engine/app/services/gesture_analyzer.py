@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from app.services.vision_metrics import _clamp, _load_vision_dependencies
+from app.services.vision_metrics import _clamp, _enable_auto_orientation, _load_vision_dependencies
 
 
 log = logging.getLogger("uvicorn.error")
@@ -65,6 +65,7 @@ class GestureAnalyzer:
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
             return self._fallback(duration_seconds, "video_open_failed")
+        _enable_auto_orientation(cv2, cap)
 
         try:
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)

@@ -183,7 +183,9 @@ class BasicAnalyzer:
         )
         logger.info(
             "Face detection summary: jobId=%s attemptedFrames=%s fullFrameDetected=%s cropRetryAttempted=%s "
-            "cropRetryDetected=%s totalDetectedFrames=%s faceDetectionRatio=%.3f fallbackUsed=%s",
+            "cropRetryDetected=%s totalDetectedFrames=%s faceDetectionRatio=%.3f "
+            "faceBoxRatioMin=%s faceBoxRatioAverage=%s faceBoxRatioMax=%s "
+            "readFailures=%s rotationDegrees=%s orientationAutoEnabled=%s fallbackUsed=%s",
             job_id,
             attempted,
             metrics.get("faceFullFrameDetectedCount"),
@@ -191,6 +193,12 @@ class BasicAnalyzer:
             metrics.get("faceCropRetryDetectedCount"),
             detected,
             BasicAnalyzer._safe_float(metrics.get("faceDetectionRatio"), 0.0),
+            metrics.get("faceBoxRatioMin"),
+            metrics.get("faceBoxRatioAverage"),
+            metrics.get("faceBoxRatioMax"),
+            metrics.get("visionReadFailureCount"),
+            metrics.get("videoRotationDegrees"),
+            metrics.get("videoOrientationAutoEnabled"),
             detected == 0,
         )
         if detected == 0:

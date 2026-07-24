@@ -154,7 +154,7 @@ function textFeedbackBlocks(textFeedback = {}) {
 // 함수 역할: ResultDetailPage 화면 구성 요소를 렌더링하고 필요한 사용자 흐름을 연결합니다.
 export default function ResultDetailPage() {
   const { resultId } = useParams();
-  const result = useResult(resultId);
+  const { result, error: resultError } = useResult(resultId);
   const videoRef = useRef(null);
   const seek = useVideoSeek(videoRef);
   const [tab, setTab] = useState('STRENGTH');
@@ -195,6 +195,7 @@ export default function ResultDetailPage() {
     };
   }, [result?.videoId]);
 
+  if (resultError) return <section className="panel error">{resultError}</section>;
   if (!result) return <section className="panel">결과를 불러오는 중입니다.</section>;
 
   const scores = normalizedScores(result.scores || []);

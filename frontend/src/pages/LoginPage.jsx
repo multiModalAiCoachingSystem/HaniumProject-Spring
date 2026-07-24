@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login } from '../api/authApi.js';
+import { apiErrorMessage } from '../api/httpClient.js';
 import useAuth from '../hooks/useAuth.js';
 
 // 함수 역할: LoginPage 화면 구성 요소를 렌더링하고 필요한 사용자 흐름을 연결합니다.
@@ -23,7 +24,7 @@ export default function LoginPage() {
       loginWithToken(data.data);
       navigate('/');
     } catch (exception) {
-      setError(exception.response?.data?.message || '로그인에 실패했습니다.');
+      setError(apiErrorMessage(exception, '로그인에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

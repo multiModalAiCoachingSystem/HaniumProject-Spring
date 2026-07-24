@@ -15,18 +15,24 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
+import com.hanium.presentation.infrastructure.security.RefreshTokenCookieFactory;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
     private final CurrentUserService currentUserService;
+    private final RefreshTokenCookieFactory refreshTokenCookieFactory;
 
     // 함수 역할: AuthController에서 클라이언트 요청을 받아 서비스 호출 결과를 응답으로 반환합니다.
-    public AuthController(AuthService authService, CurrentUserService currentUserService) {
+    public AuthController(AuthService authService, CurrentUserService currentUserService,
+                          RefreshTokenCookieFactory refreshTokenCookieFactory) {
         this.authService = authService;
         this.currentUserService = currentUserService;
+        this.refreshTokenCookieFactory = refreshTokenCookieFactory;
     }
 
     // 함수 역할: signup에서 회원가입 입력값을 검증하고 사용자 계정을 생성합니다.
@@ -39,7 +45,8 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         AuthService.LoginResult result = authService.login(request);
-        response.addCookie(refreshCookie(result.refreshToken(), 14 * 24 * 60 * 60));
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.create(result.refreshToken(), Duration.ofDays(14)).toString());
         return ApiResponse.ok(result.response(), "로그인되었습니다.");
     }
 
@@ -53,7 +60,8 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(readRefreshTokenOrNull(request));
-        response.addCookie(refreshCookie("", 0));
+        response.addHeader(HttpHeaders.SET_COOKIE,
+                refreshTokenCookieFactory.create("", Duration.ZERO).toString());
         return ApiResponse.ok(null, "로그아웃되었습니다.");
     }
 
@@ -61,15 +69,6 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<UserMeResponse> me() {
         return ApiResponse.ok(authService.me(currentUserService.currentUser()), "인증 상태입니다.");
-    }
-
-    // 함수 역할: refreshCookie에서 인증 토큰 생성, 검증, 재발급에 필요한 처리를 수행합니다.
-    private Cookie refreshCookie(String value, int maxAge) {
-        Cookie cookie = new Cookie("refreshToken", value);
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(maxAge);
-        return cookie;
     }
 
     // 함수 역할: readRefreshToken에서 저장소나 외부 시스템의 데이터를 조회합니다.

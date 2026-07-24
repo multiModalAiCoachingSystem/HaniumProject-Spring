@@ -7,6 +7,7 @@ import {
   retryAnalysis,
   startAnalysis,
 } from '../api/analysisApi.js';
+import { apiErrorMessage } from '../api/httpClient.js';
 import { uploadVideo } from '../api/videoApi.js';
 import { ALLOWED_VIDEO_MIME_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_ERROR_MESSAGE } from '../constants/fileConstants.js';
 
@@ -289,7 +290,7 @@ export default function UploadPage() {
       setStatus(response.data.data);
     } catch (exception) {
       if (!mountedRef.current) return;
-      setError(exception.response?.data?.message || '분석 상태를 불러오지 못했습니다.');
+      setError(apiErrorMessage(exception, '분석 상태를 불러오지 못했습니다.'));
     } finally {
       statusRequestInFlightRef.current = false;
     }
@@ -395,7 +396,7 @@ export default function UploadPage() {
         setUploadMessage('');
         setNotice('영상 업로드가 취소되었습니다.');
       } else {
-        setError(exception.response?.data?.message || '업로드 또는 분석 시작에 실패했습니다.');
+        setError(apiErrorMessage(exception, '업로드 또는 분석 시작에 실패했습니다.'));
         setUploadMessage('');
       }
     } finally {
@@ -455,7 +456,7 @@ export default function UploadPage() {
       setNotice('분석을 다시 시작했습니다.');
     } catch (exception) {
       if (!mountedRef.current) return;
-      setError(exception.response?.data?.message || '재시도에 실패했습니다.');
+      setError(apiErrorMessage(exception, '재시도에 실패했습니다.'));
     } finally {
       if (mountedRef.current) {
         setRetrying(false);
@@ -476,7 +477,7 @@ export default function UploadPage() {
       navigate(`/results/${resultId}`);
     } catch (exception) {
       if (!mountedRef.current) return;
-      setError(exception.response?.data?.message || '결과 페이지로 이동하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      setError(apiErrorMessage(exception, '결과 페이지로 이동하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
       if (mountedRef.current) {
         setMoving(false);

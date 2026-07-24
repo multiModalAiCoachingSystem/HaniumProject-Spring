@@ -21,6 +21,7 @@ public enum ErrorCode {
     ANALYSIS_CANCEL_NOT_ALLOWED("완료 또는 실패한 분석 작업은 취소할 수 없습니다."),
     ANALYSIS_SOURCE_VIDEO_MISSING("원본 영상 파일이 없어 다시 분석할 수 없습니다. 영상을 다시 업로드해 주세요."),
     ANALYSIS_DELETE_NOT_ALLOWED("완료, 실패 또는 취소된 리포트만 삭제할 수 있습니다."),
+    RATE_LIMIT_EXCEEDED("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
     RESULT_NOT_FOUND("분석 결과를 찾을 수 없습니다."),
     PYTHON_ANALYSIS_ERROR("분석 서버 오류가 발생했습니다."),
     LLM_RESPONSE_ERROR("AI 피드백 응답 오류가 발생했습니다."),

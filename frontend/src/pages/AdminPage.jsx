@@ -10,6 +10,7 @@ import {
   getAdminUsers,
   updateAdminUserRole,
 } from '../api/adminApi.js';
+import { apiErrorMessage } from '../api/httpClient.js';
 
 const PAGE_SIZE = 15;
 const ROLE_PRIORITY = { ADMIN: 3, MANAGER: 2, USER: 1 };
@@ -334,7 +335,10 @@ export default function AdminPage() {
         setAnalyses(analysesResponse.data.data);
         setHealth(healthResponse.data.data);
       })
-      .catch(() => setError('운영 데이터를 불러오지 못했습니다. 운영 권한으로 로그인했는지 확인하세요.'));
+      .catch((exception) => setError(apiErrorMessage(
+        exception,
+        '운영 데이터를 불러오지 못했습니다. 운영 권한으로 로그인했는지 확인하세요.',
+      )));
   }, []);
 
   useEffect(() => {
@@ -358,7 +362,7 @@ export default function AdminPage() {
       setNotice(`${user.email} 사용자를 추방했습니다.`);
       await loadAdminData();
     } catch (exception) {
-      setError(exception.response?.data?.message || '사용자 추방에 실패했습니다.');
+      setError(apiErrorMessage(exception, '사용자 추방에 실패했습니다.'));
     } finally {
       setWorkingAction('');
     }
@@ -385,7 +389,7 @@ export default function AdminPage() {
       setRoleEditUser(null);
       await loadAdminData();
     } catch (exception) {
-      setError(exception.response?.data?.message || '권한 변경에 실패했습니다.');
+      setError(apiErrorMessage(exception, '권한 변경에 실패했습니다.'));
     } finally {
       setWorkingAction('');
     }
@@ -409,7 +413,7 @@ export default function AdminPage() {
       setNotice(`#${job.jobId} 분석 작업을 삭제했습니다.`);
       await loadAdminData();
     } catch (exception) {
-      setError(exception.response?.data?.message || '분석 작업 삭제에 실패했습니다.');
+      setError(apiErrorMessage(exception, '분석 작업 삭제에 실패했습니다.'));
     } finally {
       setWorkingAction('');
     }

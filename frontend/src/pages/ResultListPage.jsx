@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { deleteAnalysisReport, getAnalysisReports, retryAnalysis } from '../api/analysisApi.js';
+import { apiErrorMessage } from '../api/httpClient.js';
 import { formatSeoulDateTime } from '../utils/dateTime.js';
 
 const PAGE_SIZE = 10;
@@ -49,6 +50,7 @@ function actionLabel(report) {
 }
 
 function userSafeDeleteError(exception) {
+  if (exception.response?.status === 429) return apiErrorMessage(exception, '리포트 삭제 요청이 제한되었습니다.');
   if (exception.response?.status === 409) return '현재 상태에서는 리포트를 삭제할 수 없습니다.';
   if (exception.response?.status === 403) return '해당 리포트를 삭제할 권한이 없습니다.';
   if (exception.response?.status === 404) return '리포트를 찾을 수 없습니다.';
@@ -56,6 +58,7 @@ function userSafeDeleteError(exception) {
 }
 
 function userSafeRetryError(exception) {
+  if (exception.response?.status === 429) return apiErrorMessage(exception, '다시 분석 요청이 제한되었습니다.');
   if (exception.response?.status === 409) {
     return exception.response?.data?.message || '현재 상태에서는 다시 분석할 수 없습니다.';
   }

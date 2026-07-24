@@ -22,6 +22,23 @@ spring:
     time-zone: ${APP_TIME_ZONE:Asia/Seoul}
 
 app:
+  security:
+    environment: ${APP_ENV:development}
+    base-url: ${APP_BASE_URL:http://localhost}
+    frontend-origins: ${FRONTEND_ORIGINS:http://localhost:5173,http://localhost}
+    trust-proxy-headers: ${TRUST_PROXY_HEADERS:false}
+    cookie:
+      secure: ${COOKIE_SECURE:false}
+      same-site: ${COOKIE_SAME_SITE:Lax}
+    rate-limit:
+      login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:10}
+      register-per-hour: ${RATE_LIMIT_REGISTER_PER_HOUR:5}
+      refresh-per-minute: ${RATE_LIMIT_REFRESH_PER_MINUTE:20}
+      upload-per-hour: ${RATE_LIMIT_UPLOAD_PER_HOUR:20}
+      analysis-per-hour: ${RATE_LIMIT_ANALYSIS_PER_HOUR:20}
+      retry-per-hour: ${RATE_LIMIT_RETRY_PER_HOUR:10}
+      admin-per-minute: ${RATE_LIMIT_ADMIN_PER_MINUTE:60}
+      api-per-minute: ${RATE_LIMIT_API_PER_MINUTE:120}
   storage:
     root: ${STORAGE_ROOT:/app/storage}
   analysis-engine:

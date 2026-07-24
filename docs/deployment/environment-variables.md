@@ -25,6 +25,22 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `DB_PORT` | backend | backend가 접속할 DB 포트 | `3306` |
 | `DB_PASSWORD` | backend | backend DB 접속 비밀번호 | `change-me` |
 | `JWT_SECRET` | backend | JWT 서명 키 | `replace-with-at-least-32-byte-secret` |
+| `APP_ENV` | backend | `development` 또는 `production` 보안 정책 선택 | `development` |
+| `APP_BASE_URL` | backend | 서비스의 외부 기준 URL. 운영에서는 HTTPS 필수 | `http://localhost` |
+| `FRONTEND_ORIGINS` | backend | 쉼표로 구분한 정확한 CORS 허용 origin | `http://localhost:5173,http://localhost` |
+| `COOKIE_SECURE` | backend | refresh cookie의 Secure 속성 | `false` |
+| `COOKIE_SAME_SITE` | backend | refresh cookie SameSite 속성 | `Lax` |
+| `TRUST_PROXY_HEADERS` | backend | 신뢰하는 reverse proxy의 client IP header 사용 여부 | `false` |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | backend | 로그인 IP별 분당 제한 | `10` |
+| `RATE_LIMIT_REGISTER_PER_HOUR` | backend | 회원가입 IP별 시간당 제한 | `5` |
+| `RATE_LIMIT_REFRESH_PER_MINUTE` | backend | token refresh IP별 분당 제한 | `20` |
+| `RATE_LIMIT_UPLOAD_PER_HOUR` | backend | 사용자별 영상 업로드 시간당 제한 | `20` |
+| `RATE_LIMIT_ANALYSIS_PER_HOUR` | backend | 사용자별 분석 시작 시간당 제한 | `20` |
+| `RATE_LIMIT_RETRY_PER_HOUR` | backend | 사용자별 재분석 시간당 제한 | `10` |
+| `RATE_LIMIT_ADMIN_PER_MINUTE` | backend | 관리자 principal별 분당 제한 | `60` |
+| `RATE_LIMIT_API_PER_MINUTE` | backend | 그 외 API principal/IP별 분당 제한 | `120` |
+| `TLS_CERTIFICATE_PATH` | 운영 nginx override | 호스트 인증서 파일 경로 | 저장소 외부 경로 |
+| `TLS_PRIVATE_KEY_PATH` | 운영 nginx override | 호스트 개인키 파일 경로 | 저장소 외부 경로 |
 | `ANALYSIS_ENGINE_BASE_URL` | backend | analysis-engine 내부 URL | `http://analysis-engine:8001` |
 | `VIDEO_LLM_ENGINE_BASE_URL` | backend | video-llm-engine 내부 URL | `http://video-llm-engine:8002` |
 | `STT_PROVIDER` | analysis-engine | STT provider | `FASTER_WHISPER` |

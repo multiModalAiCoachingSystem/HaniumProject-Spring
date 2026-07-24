@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signup } from '../api/authApi.js';
+import { apiErrorMessage } from '../api/httpClient.js';
 
 // 함수 역할: SignupPage 화면 구성 요소를 렌더링하고 필요한 사용자 흐름을 연결합니다.
 export default function SignupPage() {
@@ -20,7 +21,7 @@ export default function SignupPage() {
       alert('회원가입이 완료되었습니다.');
       navigate('/login');
     } catch (exception) {
-      setError(exception.response?.data?.message || '회원가입에 실패했습니다.');
+      setError(apiErrorMessage(exception, '회원가입에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

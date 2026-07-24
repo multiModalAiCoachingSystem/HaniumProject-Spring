@@ -48,6 +48,20 @@ docker compose `
 
 브라우저 접속 주소는 nginx 기준 `http://localhost`이다.
 
+## 4-1. 운영 HTTPS 실행
+
+실제 인증서 경로와 운영 도메인은 `infra/docker/.env`에만 설정한다. 인증서를 저장소에 복사하지 않는다.
+
+```powershell
+docker compose `
+  --env-file .\infra\docker\.env `
+  -f .\infra\docker\docker-compose.yml `
+  -f .\infra\docker\docker-compose.prod.yml `
+  up -d --build
+```
+
+운영 override는 80번 요청을 443으로 redirect하고 인증서를 read-only mount한다. 자세한 정책은 [HTTPS 및 Reverse Proxy](../security/https-and-proxy.md)를 참고한다.
+
 ## 5. 컨테이너만 재생성
 
 저장소 mount와 환경변수만 바뀐 경우에는 이미지 재빌드보다 컨테이너 재생성이 핵심이다. 코드나 Dockerfile을 바꾸지 않았다면 다음 명령으로 충분하다.

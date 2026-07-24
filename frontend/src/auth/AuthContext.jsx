@@ -23,7 +23,8 @@ export function AuthProvider({ children }) {
         localStorage.setItem('role', nextUser.role);
         setUser(nextUser);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error.response?.status === 429) return;
         localStorage.removeItem('accessToken');
         setUser(null);
       });

@@ -1,6 +1,7 @@
 // 역할: JWT 인증, 권한 검증, 보안 필터 체인을 구성하는 보안 컴포넌트입니다.
 package com.hanium.presentation.infrastructure.security;
 
+import com.hanium.presentation.infrastructure.ratelimit.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,16 +18,19 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @SuppressWarnings("null")
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
 
     // 함수 역할: SecurityConfig에서 애플리케이션 설정 객체나 보안/비동기 설정을 구성합니다.
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     // 함수 역할: securityFilterChain에서 애플리케이션 설정 객체나 보안/비동기 설정을 구성합니다.
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> {})
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -35,7 +39,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/videos/**", "/api/analyses/**", "/api/results/**", "/api/auth/logout", "/api/auth/me").authenticated()
                         .anyRequest().permitAll()
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
         return http.build();
     }
 

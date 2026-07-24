@@ -24,6 +24,8 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `DB_HOST` | backend | backend가 접속할 DB 호스트 | `mysql` |
 | `DB_PORT` | backend | backend가 접속할 DB 포트 | `3306` |
 | `DB_PASSWORD` | backend | backend DB 접속 비밀번호 | `change-me` |
+| `FLYWAY_BASELINE_ON_MIGRATE` | backend | 기존 DB 최초 도입 1회에만 `true`. 평상시에는 반드시 `false` | `false` |
+| `FLYWAY_BASELINE_VERSION` | backend | 기존 스키마의 baseline 버전 | `1` |
 | `JWT_SECRET` | backend | JWT 서명 키 | `replace-with-at-least-32-byte-secret` |
 | `APP_ENV` | backend | `development` 또는 `production` 보안 정책 선택 | `development` |
 | `APP_BASE_URL` | backend | 서비스의 외부 기준 URL. 운영에서는 HTTPS 필수 | `http://localhost` |
@@ -72,8 +74,14 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `NVIDIA_MAX_IMAGES` | video-llm-engine | NVIDIA로 보낼 최대 프레임 수. NVIDIA API 제한을 고려해 내부 상한은 10 | `8` |
 | `NVIDIA_MAX_PAYLOAD_MB` | video-llm-engine | NVIDIA 요청 JSON payload 제한 | `20` |
 | `OLLAMA_BASE_URL` | backend, video-llm-engine | Ollama API URL | `http://host.docker.internal:11434` |
+| `BACKUP_ROOT` | PowerShell backup scripts | 프로젝트·storage 외부의 백업 루트. 실제 경로는 `.env`에만 기록 | `D:/presentation-coaching-backups` |
+| `BACKUP_RETENTION_DAYS` | PowerShell backup scripts | 백업 보관 기간 | `14` |
+| `BACKUP_KEEP_MINIMUM` | PowerShell backup scripts | 기간과 무관하게 유지할 최소 백업 수 | `3` |
+| `BACKUP_INCLUDE_TEMP_ARTIFACTS` | PowerShell backup scripts | `video-llm`, `tmp` 임시 산출물 포함 여부 | `false` |
 
 `DB_PASSWORD`는 실제 MySQL `presentation` 계정 비밀번호와 같아야 한다. 기존 `mysql-data` 볼륨이 이미 생성된 뒤 `.env`의 `MYSQL_PASSWORD`를 바꿔도 MySQL 계정 비밀번호는 자동 변경되지 않는다.
+
+Flyway와 백업 운영 절차는 [Flyway 마이그레이션 운영](../database/flyway-migrations.md), [DB 및 Storage 백업·복원](backup-and-restore.md)을 참고한다.
 
 ## 시간 저장 및 표시 정책
 

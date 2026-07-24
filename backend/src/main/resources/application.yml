@@ -12,7 +12,7 @@ spring:
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
@@ -20,6 +20,13 @@ spring:
           time_zone: ${APP_TIME_ZONE:Asia/Seoul}
   jackson:
     time-zone: ${APP_TIME_ZONE:Asia/Seoul}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+    baseline-version: ${FLYWAY_BASELINE_VERSION:1}
+    validate-on-migrate: true
+    clean-disabled: true
 
 app:
   security:

@@ -98,17 +98,29 @@ MySQL 컨테이너가 처음 실행될 때 `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWOR
 
 데이터를 보존해야 하는 경우 `mysql-data` 볼륨을 삭제하지 않는다.
 
-## 8. 분석 복구 컬럼
+## 8. Flyway 스키마 관리
 
-기존 MySQL 볼륨을 `spring.profiles.active=prod`로 실행하기 전에는 다음 migration을 한 번 적용한다.
+현재 backend는 Flyway `11.20.2`로 DB schema를 관리하고 Hibernate는 `ddl-auto=validate`만 수행한다. Hibernate가 Docker 개발 DB를 자동 변경하지 않는다.
 
-`infra/mysql/migrations/20260724_add_analysis_recovery_columns.sql`
+- 빈 DB: V1부터 자동 적용
+- 기존 운영 볼륨: baseline V1 적용 완료, V2까지 관리
+- 평상시 `FLYWAY_BASELINE_ON_MIGRATE=false`
+- 기존 migration 파일 수정 금지
 
-기본 Docker 개발 설정은 `ddl-auto=update`이므로 backend 최초 재기동 시 같은 컬럼을 자동으로 추가한다.
-migration은 컬럼 존재 여부를 확인하므로 중복 실행해도 기존 컬럼이나 분석 결과를 삭제하지 않는다.
+분석 복구 컬럼은 V1 baseline schema에 포함되어 있다. 기존 볼륨에 별도 수동 SQL을 다시 적용하지 않는다. 자세한 절차는 [Flyway 마이그레이션 운영](../database/flyway-migrations.md)을 참고한다.
 
 backend 시작 로그의 다음 숫자로 복구 대상 수를 확인할 수 있다.
 
 ```text
 Backend recovery started: queuedCount=0 processingCount=0 cancelRequestedCount=0
 ```
+
+## 9. 백업 후 실행
+
+배포 또는 migration 전 다음 통합 백업을 권장한다.
+
+```powershell
+.\scripts\backup\backup-all.ps1
+```
+
+백업·복원 범위, checksum, retention, 복원 훈련은 [DB 및 Storage 백업·복원](backup-and-restore.md)을 참고한다.

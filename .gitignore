@@ -63,3 +63,13 @@ id_ed25519*
 job-*
 
 storage/models/
+
+# Backup artifacts
+backups/
+*.sql
+*.sql.gz
+*.backup
+*.bak
+*.sha256
+!backend/src/main/resources/db/migration/*.sql
+!infra/mysql/**/*.sql

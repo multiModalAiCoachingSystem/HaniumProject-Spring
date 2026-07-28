@@ -50,6 +50,7 @@ storage/logs/*
 !.env.example
 !**/.env.example
 !*.env.example
+!**/.env.ci.example
 *.pem
 *.key
 *.p12

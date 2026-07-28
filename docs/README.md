@@ -54,3 +54,11 @@
 - 계산 기준과 변경 가능한 수치는 코드 또는 설정 위치를 함께 적는다.
 - 구현되지 않은 기능은 `미구현` 또는 `추가 예정`으로 표시한다.
 - 이미 적용된 Flyway migration 파일은 수정하지 않고 새 버전을 추가한다.
+
+## 테스트와 CI 문서
+
+| 문서 | 목적 | 작성 상태 |
+|---|---|---|
+| [GitHub Actions CI](testing/ci.md) | PR 및 main 자동 검증 구조, 캐시, 권한, artifact 정책 | 작성 완료 |
+| [로컬 테스트 가이드](testing/local-test-guide.md) | 프로젝트 루트 및 서비스별 반복 실행 명령 | 작성 완료 |
+| [통합 테스트](testing/integration-tests.md) | 빈 MySQL, Flyway, Backend API smoke test 범위 | 작성 완료 |

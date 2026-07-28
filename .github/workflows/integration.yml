@@ -1,0 +1,142 @@
+name: Integration CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-integration:
+    name: Flyway and Backend Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: presentation_coaching_ci
+          MYSQL_USER: ci_user
+          MYSQL_PASSWORD: ci-password-only
+          MYSQL_ROOT_PASSWORD: ci-root-password-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uci_user -pci-password-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_TIME_ZONE: Asia/Seoul
+      APP_ENV: development
+      APP_BASE_URL: http://localhost
+      FRONTEND_ORIGINS: http://localhost:5173
+      COOKIE_SECURE: "false"
+      COOKIE_SAME_SITE: Lax
+      TRUST_PROXY_HEADERS: "false"
+      RATE_LIMIT_LOGIN_PER_MINUTE: "3"
+      RATE_LIMIT_REGISTER_PER_HOUR: "10"
+      RATE_LIMIT_REFRESH_PER_MINUTE: "10"
+      RATE_LIMIT_UPLOAD_PER_HOUR: "10"
+      RATE_LIMIT_ANALYSIS_PER_HOUR: "10"
+      RATE_LIMIT_RETRY_PER_HOUR: "10"
+      RATE_LIMIT_ADMIN_PER_MINUTE: "30"
+      RATE_LIMIT_API_PER_MINUTE: "60"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: presentation_coaching_ci
+      DB_USERNAME: ci_user
+      DB_PASSWORD: ci-password-only
+      FLYWAY_BASELINE_ON_MIGRATE: "false"
+      FLYWAY_BASELINE_VERSION: "1"
+      JWT_SECRET: ci-only-secret-must-never-be-used-outside-automated-tests-1234567890
+      STORAGE_ROOT: /tmp/presentation-coaching-ci-storage
+      ANALYSIS_ENGINE_BASE_URL: http://127.0.0.1:9
+      VIDEO_LLM_ENGINE_BASE_URL: http://127.0.0.1:9
+      TEXT_LLM_PROVIDER: NONE
+      TEXT_LLM_MODEL: qwen3:4b
+      TEXT_LLM_TIMEOUT_SECONDS: "1"
+      OLLAMA_BASE_URL: http://127.0.0.1:9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build backend jar
+        working-directory: backend
+        run: ./gradlew clean bootJar --no-daemon
+      - name: Validate Compose configuration
+        run: |
+          mkdir -p /tmp/presentation-coaching-ci-storage
+          docker compose \
+            --env-file infra/docker/.env.ci.example \
+            -f infra/docker/docker-compose.yml \
+            config --quiet
+      - name: Build backend container
+        run: |
+          docker compose \
+            --env-file infra/docker/.env.ci.example \
+            -f infra/docker/docker-compose.yml \
+            build backend
+      - name: Start backend
+        run: |
+          mkdir -p "$STORAGE_ROOT"
+          backend_jar="$(find backend/build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' -print -quit)"
+          test -n "$backend_jar"
+          java -jar "$backend_jar" > backend-ci.log 2>&1 &
+          echo $! > backend-ci.pid
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:8080/api/health > /dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat backend-ci.pid)" 2>/dev/null; then
+              cat backend-ci.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat backend-ci.log
+          exit 1
+      - name: Verify Flyway history
+        run: |
+          mysql_container="$(docker ps --filter ancestor=mysql:8.4 --format '{{.ID}}' | head -n 1)"
+          test -n "$mysql_container"
+          docker exec \
+            -e MYSQL_PWD=ci-password-only \
+            "$mysql_container" \
+            mysql \
+            --user=ci_user \
+            --database=presentation_coaching_ci \
+            --batch \
+            --skip-column-names \
+            --execute="SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1;" \
+            | grep -Eq '^[1-9][0-9]*$'
+      - name: Backend API smoke test
+        run: python scripts/ci/smoke_backend.py --base-url http://127.0.0.1:8080
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-diagnostics
+          path: |
+            backend-ci.log
+            backend/build/reports/tests
+            backend/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f backend-ci.pid ]; then
+            kill "$(cat backend-ci.pid)" 2>/dev/null || true
+          fi

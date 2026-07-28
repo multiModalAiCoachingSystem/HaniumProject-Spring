@@ -1,5 +1,7 @@
 # presentation-coaching-ai
 
+[![CI](https://github.com/multiModalAiCoachingSystem/HaniumProject-Spring/actions/workflows/ci.yml/badge.svg)](https://github.com/multiModalAiCoachingSystem/HaniumProject-Spring/actions/workflows/ci.yml)
+
 발표 영상을 업로드하면 영상, 음성, STT, Video LLM, 일반 LLM 결과를 통합해 발표 점수와 시간대별 코칭을 제공하는 멀티모달 발표 코칭 서비스입니다.
 
 ## 시스템 구조

@@ -8,9 +8,10 @@
 |---|---|---|
 | `QUEUED` | 분석 대기 | 사용 |
 | `PROCESSING` | 분석 진행 중 | 사용 |
+| `CANCEL_REQUESTED` | 실행 중인 단계 종료 후 취소 요청 | 사용 |
 | `DONE` | 분석 완료 | 사용 |
 | `FAILED` | 분석 실패 | 사용 |
-| `CANCELED` | 취소 | enum만 존재, 취소 API 미구현 |
+| `CANCELED` | 최종 취소 | 사용 |
 
 ## `AnalysisStep`
 
@@ -37,7 +38,7 @@
 | 값 | 우선순위 | 권한 |
 |---|---:|---|
 | `USER` | 1 | 일반 기능 |
-| `MANAGER` | 2 | 운영 콘솔 접근, 분석 작업 삭제 |
+| `MANAGER` | 2 | 운영 콘솔 접근과 조회. 임의 사용자 분석 삭제의 소유권 생략 대상은 아님 |
 | `ADMIN` | 3 | 운영 콘솔 접근, 사용자 권한 변경/추방, 전체 결과 접근 |
 
 ## `FeedbackCategory`
@@ -64,3 +65,5 @@
 | `completed_at` | null |
 
 재시도 전에 기존 `final_analysis_results`는 삭제된다. 파일 시스템의 이전 분석 산출물도 commit 이후 삭제된다.
+
+재시도 허용 상태는 `FAILED`, `CANCELED`이며 동일 `jobId`를 유지한다. 삭제 허용 상태는 `DONE`, `FAILED`, `CANCELED`이다.

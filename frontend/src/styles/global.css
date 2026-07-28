@@ -31,6 +31,14 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.route-loading {
+  display: grid;
+  min-height: 50vh;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 760;
+}
+
 button,
 input {
   font: inherit;

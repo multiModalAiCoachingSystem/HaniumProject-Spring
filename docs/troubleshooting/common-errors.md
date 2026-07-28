@@ -22,11 +22,11 @@ analysis-engine과 video-llm-engine Dockerfile은 ffmpeg를 설치한다. 로컬
 
 ## 리포트 삭제가 실패
 
-삭제 가능한 상태는 `DONE` 또는 `FAILED`뿐이다. `QUEUED`/`PROCESSING` 상태의 job은 삭제 API에서 409 `ANALYSIS_DELETE_NOT_ALLOWED`를 반환한다.
+삭제 가능한 상태는 `DONE`, `FAILED`, `CANCELED`이다. `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED` 상태의 job은 삭제 API에서 409 `ANALYSIS_DELETE_NOT_ALLOWED`를 반환한다.
 
 ## 재시도 실패
 
-재시도 가능한 상태는 `FAILED`뿐이다. 원본 영상 파일이 storage에 없으면 409 `ANALYSIS_SOURCE_VIDEO_MISSING`가 반환된다.
+재시도 가능한 상태는 `FAILED`, `CANCELED`이다. 원본 영상 파일이 storage에 없으면 409 `ANALYSIS_SOURCE_VIDEO_MISSING`가 반환된다.
 
 ## 운영 콘솔 health가 실제 엔진 상태와 다름
 

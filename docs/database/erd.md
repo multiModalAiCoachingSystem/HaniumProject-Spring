@@ -52,6 +52,9 @@ erDiagram
         varchar step
         int progress_percent
         int retry_count
+        int recovery_attempt_count
+        datetime last_recovery_at
+        varchar last_recovery_reason
         varchar message
         varchar error_message
         datetime created_at
@@ -81,4 +84,15 @@ erDiagram
 
 ## 인덱스
 
-코드에 명시된 인덱스 어노테이션은 없다. JPA의 `unique=true`로 인해 `users.email`, `refresh_tokens.token_hash`, `final_analysis_results.job_id`에는 unique 제약이 생성된다. FK 인덱스는 Hibernate/MySQL 생성 방식에 따른다.
+V1 unique 제약:
+
+- `users.email`
+- `refresh_tokens.token_hash`
+- `final_analysis_results.job_id`
+
+V2 query 인덱스:
+
+- `analysis_jobs(user_id, status, created_at, id)`
+- `analysis_jobs(status, created_at, id)`
+- `uploaded_videos(user_id, created_at, id)`
+- `refresh_tokens(user_id, revoked)`

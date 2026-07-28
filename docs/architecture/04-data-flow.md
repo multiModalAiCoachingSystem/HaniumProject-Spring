@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
     File["브라우저 File"] --> VideoAPI["POST /api/videos"]
-    VideoAPI --> Storage["/data/uploads/{uuid}.{ext}"]
+    VideoAPI --> Storage["/app/storage/uploads/{uuid}.{ext}"]
     VideoAPI --> UploadedVideos["uploaded_videos"]
     UploadedVideos --> AnalysisAPI["POST /api/analyses"]
     AnalysisAPI --> Jobs["analysis_jobs"]
@@ -45,11 +45,13 @@ flowchart TB
 리포트 삭제는 `AnalysisCommandService.deleteReport()`가 담당한다.
 
 1. job 소유자 또는 `ADMIN`인지 확인한다.
-2. `DONE` 또는 `FAILED` 상태인지 확인한다.
+2. `DONE`, `FAILED`, `CANCELED` 상태인지 확인한다.
 3. `final_analysis_results`를 먼저 삭제한다.
 4. `analysis_jobs`를 삭제한다.
 5. 같은 video를 참조하는 job이 없으면 `uploaded_videos`와 영상 파일도 삭제한다.
-6. commit 이후 `analysis/job-{id}`, `tmp/job-{id}`, `thumbnails/job-{id}` 등을 파일 시스템에서 정리한다.
+6. commit 이후 job 임시 디렉터리, 변환 영상, 썸네일, 엔진 산출물 등을 파일 시스템에서 정리한다.
+
+파일이 이미 없거나 개별 artifact 삭제가 실패하면 warning 로그를 남기고 DB 삭제는 계속한다. 다른 job이 같은 `uploaded_videos` row를 참조하면 원본과 video row는 보존한다.
 
 ## 미구현/주의
 

@@ -32,7 +32,7 @@ export default function SignupPage() {
       <div className="auth-copy">
         <p className="section-kicker">Create Workspace</p>
         <h1>나만의 발표 코칭 공간을 만드세요.</h1>
-        <p className="lead-text">MulMoCo는 영상 업로드부터 분석 결과 저장까지 사용자별로 분리해 관리합니다.</p>
+        <p className="lead-text">피치메이트는 영상 업로드부터 분석 결과 저장까지 사용자별로 분리해 관리합니다.</p>
         <div className="auth-proof">
           <span>BCrypt 비밀번호 암호화</span>
           <span>이메일 중복 검사</span>

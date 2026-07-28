@@ -1,4 +1,4 @@
-# Presentation Coaching AI 문서
+# 피치메이트 문서
 
 이 디렉터리는 실제 프로젝트 코드와 운영 설정을 설명한다. 비밀값과 사용자 데이터는 포함하지 않으며, 미구현 항목은 완료 기능처럼 기록하지 않는다.
 
@@ -34,10 +34,12 @@
 | presentation | [아키텍처 비교](presentation/architecture-comparison.md) | 기술 선택 비교 | 작성 완료 |
 | presentation | [Spring Boot 사용 이유](presentation/spring-boot-advantages.md) | backend 기술 선택 근거 | 작성 완료 |
 | presentation | [최종 시연](presentation/final-demo-scenario.md) | 사용자 시연 순서 | 작성 완료 |
+| presentation | [시연 체크리스트](presentation/pre-demo-checklist.md) | 시연 전 점검과 장애 대비 | 작성 완료 |
 | deployment | [Docker 실행](deployment/docker-guide.md) | Compose 실행과 mount 확인 | 작성 완료 |
 | deployment | [환경변수](deployment/environment-variables.md) | 환경변수명과 사용 위치 | 작성 완료 |
 | deployment | [외부 접속](deployment/external-access.md) | Nginx와 외부 접근 | 작성 완료 |
 | deployment | [백업·복원](deployment/backup-and-restore.md) | DB/storage 백업, checksum, 복원 훈련 | 작성 완료 |
+| deployment | [운영 Runbook](deployment/operations-runbook.md) | 시작, 재시작, 로그, 장애 대응 | 작성 완료 |
 | security | [비밀정보 관리](security/secret-management.md) | secret 보관 원칙 | 작성 완료 |
 | security | [HTTPS와 Proxy](security/https-and-proxy.md) | TLS와 proxy header 정책 | 작성 완료 |
 | security | [Cookie, CORS, CSRF](security/cookie-cors-csrf.md) | 브라우저 인증 보안 | 작성 완료 |
@@ -46,6 +48,10 @@
 | testing | [시각 분석 회귀](testing/vision-regression-test.md) | 얼굴·시선·제스처 검증 기준 | 작성 완료 |
 | troubleshooting | [공통 오류](troubleshooting/common-errors.md) | 서비스별 장애 확인 | 작성 완료 |
 | troubleshooting | [DB 복구 오류](troubleshooting/database-recovery.md) | Flyway, dump, storage 복구 장애 대응 | 작성 완료 |
+| user | [사용자 가이드](user/user-guide.md) | 업로드, 취소, 재분석, 리포트 사용법 | 작성 완료 |
+| user | [촬영 가이드](user/shooting-guide.md) | 분석 신뢰도를 위한 촬영 조건 | 작성 완료 |
+| admin | [관리자 가이드](admin/admin-guide.md) | 실제 운영 권한과 제한 | 작성 완료 |
+| limitations | [알려진 한계](known-limitations.md) | 분석, LLM, 보안, CI의 현재 한계 | 작성 완료 |
 
 ## 작성 원칙
 

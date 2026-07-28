@@ -28,7 +28,7 @@ Nemotron은 영어 시각 관찰 결과를 생성한다. 최종 한국어 피드
 
 `QwenVlRunner._prompt()`는 기존 qwen3-vl 경로에서 사용된다. 프롬프트에는 다음 정보가 포함된다.
 
-- 역할: `MulMoCo's Qwen-VL presentation coaching model`
+- 역할: 코드에 남아 있는 `MulMoCo's Qwen-VL presentation coaching model`. `MULMOCO`는 팀명이며 사용자 서비스명은 피치메이트다.
 - 지시: 샘플 프레임의 가시 증거만 근거로 분석
 - 출력 제한: markdown 없이 valid JSON만 반환
 - `Video metadata`

@@ -20,11 +20,11 @@ NVIDIA Nemotron Video LLM을 사용하려면 `infra/docker/.env`에 `VIDEO_LLM_P
 
 | 대상 | 경로 |
 |---|---|
-| 호스트 저장소 | `HOST_STORAGE_PATH=D:/presentation-coaching-storage` |
+| 호스트 저장소 | `HOST_STORAGE_PATH=<프로젝트-외부-storage-경로>` |
 | 컨테이너 내부 저장소 | `STORAGE_ROOT=/app/storage` |
 | Compose mount | `${HOST_STORAGE_PATH}:/app/storage` |
 
-`D:/presentation-coaching-ai/storage`는 새 작업 저장 위치로 사용하지 않는다. `HOST_STORAGE_PATH`가 누락되면 compose가 시작 전에 오류를 낸다.
+프로젝트 내부 `storage`는 새 작업 저장 위치로 사용하지 않는다. `HOST_STORAGE_PATH`가 누락되거나 호스트 디렉터리가 존재하지 않으면 compose가 시작 전에 오류를 내도록 구성되어 있다.
 
 ## 3. 설정 검증
 
@@ -43,7 +43,7 @@ docker compose `
 docker compose `
   --env-file .\infra\docker\.env `
   -f .\infra\docker\docker-compose.yml `
-  up -d --build
+  up -d --build --force-recreate
 ```
 
 브라우저 접속 주소는 nginx 기준 `http://localhost`이다.
@@ -85,12 +85,19 @@ docker compose `
 ## 6. Mount 확인
 
 ```powershell
-docker inspect presentation-coaching-ai-backend-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
-docker inspect presentation-coaching-ai-analysis-engine-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
-docker inspect presentation-coaching-ai-video-llm-engine-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+$services = 'backend', 'analysis-engine', 'video-llm-engine'
+foreach ($service in $services) {
+  $containerId = docker compose `
+    --env-file .\infra\docker\.env `
+    -f .\infra\docker\docker-compose.yml `
+    ps -q $service
+  docker inspect $containerId --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+}
 ```
 
-세 서비스 모두 `D:\presentation-coaching-storage -> /app/storage`를 보여야 한다.
+세 서비스 모두 동일한 호스트 Source에서 `/app/storage`로 연결되어야 한다.
+
+Backend Docker build는 JDK 21 builder에서 저장소의 `./gradlew`를 실행한다. 로컬, CI, Docker가 모두 `gradle-wrapper.properties`의 Gradle 9.3.0을 사용한다.
 
 ## 7. 기존 MySQL 볼륨 주의사항
 

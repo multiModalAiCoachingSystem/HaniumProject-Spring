@@ -2,48 +2,74 @@
 
 ## 목적
 
-손과 팔 움직임이 발표 내용 강조에 충분한지 평가한다. 현재 구현 위치는 `analysis-engine/app/services/basic_analyzer.py`의 `_gesture_metrics()`와 `score_calculator.py`의 `gesture_score()`이다.
+발표 영상에서 팔과 손목의 움직임 양, 빈도, 좌우 균형과 안정성을 계산한다. 구현 위치는 `analysis-engine/app/services/gesture_analyzer.py`, `basic_analyzer.py`, `score_calculator.py`다.
 
-## 입력 데이터
+## 입력과 landmark
 
-- `gestureMovementRatio`
-- `gestureCountPerMinute`
-- `stillHandRatio`
-- `duration_seconds`
+`GestureAnalyzer`는 Video LLM용 저장 프레임을 사용하지 않고 OpenCV로 영상을 직접 읽으며 최대 240프레임을 분석한다. MediaPipe Pose index는 다음과 같다.
 
-## 계산식
+| landmark | index |
+|---|---:|
+| left/right shoulder | 11 / 12 |
+| left/right elbow | 13 / 14 |
+| left/right wrist | 15 / 16 |
 
-현재 손 랜드마크 기반 실제 제스처 분석은 미구현이다. `BasicAnalyzer._gesture_metrics()`가 임시 값을 반환한다.
+visibility 0.15 이상이고 정규화 좌표가 허용 범위인 landmark만 사용한다. 손목 이동 65%와 팔꿈치 이동 35%를 어깨 너비로 정규화한다.
+
+## 실제 지표
+
+- `gestureAverageMovement`: 유효 프레임 간 평균 정규화 이동량
+- `gestureMovementRatio`: 평균 이동량을 0.16 기준으로 0~1 정규화
+- `gestureFrequency`, `gestureCountPerMinute`: 이동량 0.06 이상인 구간의 분당 빈도
+- `gestureBalance`: 좌우 누적 이동량의 균형, 0~1
+- `gestureStability`: 비정상 이동 outlier 비율의 역값
+- `gestureVisibleRatio`: 유효 팔 landmark 프레임 / 샘플 프레임
+- `stillHandRatio`: 이동량 0.015 미만 비율
+- `gestureActivityScore`: 활동량, 빈도, 균형, 안정성의 0~100 점수
+
+## 활동 점수
 
 ```text
-gestureMovementRatio = 0.46 if duration_seconds < 300 else 0.40
-gestureCountPerMinute = 4.2
-stillHandRatio = 0.18
+movementScore  = 적정 movementRatio 0.35~0.68에서 최고
+frequencyScore = 적정 frequency 3~9회/분에서 최고
+balanceScore   = 55 + gestureBalance * 45
+stabilityScore = 45 + gestureStability * 55
+
+gestureActivityScore =
+  movementScore * 0.40 +
+  frequencyScore * 0.30 +
+  balanceScore * 0.15 +
+  stabilityScore * 0.15
 ```
 
-점수 계산:
+움직임이나 빈도가 적정 구간을 지나 과도해지면 점수가 낮아진다. 움직임이 많을수록 무조건 유리하지 않다.
+
+## 최종 제스처 점수
 
 ```text
-movement_score = _range_score(movementRatio, 0.15, 0.30, 0.65, 0.85)
-count_score = _range_score(countPerMinute, 1.0, 3.0, 8.0, 14.0)
-still_penalty = min(18.0, stillHandRatio * 45.0)
-gestureScore = clamp(average(movement_score, count_score) - still_penalty)
+movementScore = rangeScore(gestureMovementRatio, 0.15, 0.30, 0.65, 0.85)
+countScore = rangeScore(gestureCountPerMinute, 1, 3, 8, 14)
+stillPenalty = min(18, stillHandRatio * 45)
+baseScore = average(movementScore, countScore) - stillPenalty
+gestureScore = clamp(baseScore * 0.55 + gestureActivityScore * 0.45)
 ```
 
-## 기준값
+최종 종합점수 가중치는 10%다.
 
-- 움직임 이상 구간: 0.30~0.65
-- 분당 제스처 이상 구간: 3~8회
-- `stillHandRatio > 0.1`: 손이 멈춰 있는 시간이 길다는 피드백
+## fallback
 
-## 점수화
+다음이면 결정적 fallback을 사용하고 전체 분석은 계속한다.
 
-제스처 점수는 `GESTURE` category로 반환되며 최종 점수 가중치는 0.10이다.
+- 원본 영상 누락 또는 열기 실패
+- OpenCV/MediaPipe 로딩 실패
+- frame count 확인 실패
+- 샘플 또는 유효 프레임이 8개 미만
+- `gestureVisibleRatio < 0.20`
+- 유효한 프레임 간 이동량 없음
+- 처리 중 예외
 
-## 예외 처리
-
-현재는 실제 영상에서 손 탐지를 수행하지 않기 때문에 제스처 지표 자체의 분석 실패 예외가 없다.
+fallback은 호환용 `gestureMovementRatio=0.46`, `gestureCountPerMinute=4.2`, `stillHandRatio=0.18`, `gestureActivityScore=72.0`을 사용하고 `gestureAnalysisFallback=true`와 사유를 기록한다. 실제 영상 기반 값으로 오해하지 않아야 한다.
 
 ## 한계
 
-MediaPipe Hands 또는 pose 기반 팔 움직임 분석은 추가 예정이다. 현재 제스처 점수는 발표 길이에 따른 임시 추정값이므로 실제 손동작 품질을 정밀하게 반영하지 못한다.
+MediaPipe Hands가 아니라 Pose 팔 좌표를 사용하므로 손가락 모양과 작은 손동작은 분석하지 않는다. 팔이 화면 밖에 있거나 발표대에 가려지면 감지율과 정확도가 낮아진다.

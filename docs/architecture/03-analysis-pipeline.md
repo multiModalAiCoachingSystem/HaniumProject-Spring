@@ -28,7 +28,8 @@ sequenceDiagram
     AE-->>BE: metrics, scores, totalScore
     BE->>DB: PROCESSING/VIDEO_LLM_ANALYSIS 75%
     BE->>VLE: POST /api/video-llm-analysis
-    VLE-->>BE: sampledFrames, observations
+    VLE-->>BE: observations, provider metadata
+    BE->>BE: qwen3:4b 한국어 피드백 또는 fallback
     BE->>DB: final_analysis_results 저장
     BE->>DB: DONE/COMPLETED 100%
 ```
@@ -52,4 +53,12 @@ sequenceDiagram
 
 ## 프론트엔드 polling
 
-`UploadPage.jsx`와 `ResultListPage.jsx`는 `QUEUED`, `PROCESSING` 상태일 때 4초 간격으로 상태/리포트를 다시 조회한다. `useAnalysisStatus.js`는 2초 polling 훅이지만 현재 status 페이지는 `/upload`로 redirect하는 구조이다.
+`UploadPage.jsx`와 `ResultListPage.jsx`는 `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED` 상태일 때 4초 간격으로 상태/리포트를 다시 조회한다. `DONE`, `FAILED`, `CANCELED`에서는 polling을 중단한다. `useAnalysisStatus.js`는 2초 polling 훅이지만 현재 status 페이지는 `/upload`로 redirect하는 구조이다.
+
+## 취소와 재시작 보호
+
+- `QUEUED` 취소는 즉시 `CANCELED`로 바뀐다.
+- `PROCESSING` 취소는 `CANCEL_REQUESTED`가 되고 pipeline의 단계별 확인 지점에서 `CANCELED`로 확정된다.
+- 취소 상태는 결과 저장, `DONE`, `FAILED`로 덮어쓰지 않는다.
+- `FAILED`, `CANCELED` 재분석은 같은 `jobId`를 유지하고 기존 결과와 부분 산출물을 정리한 뒤 `QUEUED`로 전환한다.
+- backend 시작 시 recovery service가 남은 `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED`를 조건부 UPDATE로 claim해 복구한다.

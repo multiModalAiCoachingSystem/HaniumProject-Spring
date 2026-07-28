@@ -10,11 +10,11 @@ export default function MainLayout() {
   return (
     <>
       <header className="app-header">
-        <Link to="/" className="brand" aria-label="MulMoCo 홈">
-          <span className="brand-symbol">M</span>
+        <Link to="/" className="brand" aria-label="피치메이트 홈">
+          <span className="brand-symbol">P</span>
           <span className="brand-copy">
-            <strong>MulMoCo</strong>
-            <small>Presentation Intelligence</small>
+            <strong>피치메이트</strong>
+            <small>AI Presentation Coaching</small>
           </span>
         </Link>
 

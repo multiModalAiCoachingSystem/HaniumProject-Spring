@@ -13,7 +13,7 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | 변수명 | 사용 위치 | 설명 | 예시값 |
 |---|---|---|---|
 | `APP_TIME_ZONE` | mysql, backend | DB `DATETIME`, JVM, Hibernate, Jackson에서 사용하는 서비스 표준 timezone | `Asia/Seoul` |
-| `HOST_STORAGE_PATH` | Docker bind mount | 호스트의 공유 저장소 경로. 프로젝트 내부 `storage`가 아니라 외부 D 드라이브 경로를 사용한다. | `D:/presentation-coaching-storage` |
+| `HOST_STORAGE_PATH` | Docker bind mount | 호스트의 공유 저장소 경로. 프로젝트 내부가 아닌 기존 디렉터리 사용 | `<프로젝트-외부-storage-경로>` |
 | `STORAGE_ROOT` | backend, analysis-engine, video-llm-engine | 컨테이너 내부 공유 저장소 경로 | `/app/storage` |
 | `ANALYSIS_RECOVERY_MAX_ATTEMPTS` | backend | backend 재시작 시 job 자동 복구 최대 횟수 | `3` |
 | `HF_HOME` | analysis-engine | Hugging Face 모델 캐시 경로 | `/app/storage/models/huggingface` |
@@ -50,6 +50,12 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `WHISPER_DEVICE` | analysis-engine | Whisper 실행 장치 | `cpu` |
 | `WHISPER_COMPUTE_TYPE` | analysis-engine | Whisper compute type | `int8` |
 | `STT_LANGUAGE` | analysis-engine | STT 언어 | `ko` |
+| `FACE_DETECTION_CONFIDENCE` | analysis-engine | FaceMesh 최소 감지 confidence | `0.3` |
+| `FACE_TRACKING_CONFIDENCE` | analysis-engine | FaceMesh 최소 tracking confidence | `0.3` |
+| `FACE_ANALYSIS_MAX_WIDTH` | analysis-engine | 얼굴 분석 입력 프레임 최대 너비 | `1280` |
+| `FACE_CROP_RETRY_ENABLED` | analysis-engine | 전체 프레임 실패 시 Haar 얼굴 crop retry | `true` |
+| `FACE_CROP_PADDING_RATIO` | analysis-engine | 얼굴 crop 주변 여백 비율 | `0.25` |
+| `FACE_CROP_MIN_SIZE` | analysis-engine | retry crop 최소 변 길이 | `256` |
 | `AUDIO_VAD_PROVIDER` | analysis-engine | 음성 구간 검출 방식. `RMS`, `SILERO`, `NONE` 중 선택 | `RMS` |
 | `AUDIO_VAD_FALLBACK_PROVIDER` | analysis-engine | Silero 실패 시 fallback 방식 | `RMS` |
 | `VAD_MIN_SPEECH_MS` | analysis-engine | speech segment로 인정할 최소 발화 길이(ms) | `250` |
@@ -74,7 +80,7 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `NVIDIA_MAX_IMAGES` | video-llm-engine | NVIDIA로 보낼 최대 프레임 수. NVIDIA API 제한을 고려해 내부 상한은 10 | `8` |
 | `NVIDIA_MAX_PAYLOAD_MB` | video-llm-engine | NVIDIA 요청 JSON payload 제한 | `20` |
 | `OLLAMA_BASE_URL` | backend, video-llm-engine | Ollama API URL | `http://host.docker.internal:11434` |
-| `BACKUP_ROOT` | PowerShell backup scripts | 프로젝트·storage 외부의 백업 루트. 실제 경로는 `.env`에만 기록 | `D:/presentation-coaching-backups` |
+| `BACKUP_ROOT` | PowerShell backup scripts | 프로젝트·storage 외부의 백업 루트. 실제 경로는 `.env`에만 기록 | `<프로젝트-외부-백업-경로>` |
 | `BACKUP_RETENTION_DAYS` | PowerShell backup scripts | 백업 보관 기간 | `14` |
 | `BACKUP_KEEP_MINIMUM` | PowerShell backup scripts | 기간과 무관하게 유지할 최소 백업 수 | `3` |
 | `BACKUP_INCLUDE_TEMP_ARTIFACTS` | PowerShell backup scripts | `video-llm`, `tmp` 임시 산출물 포함 여부 | `false` |
@@ -95,8 +101,8 @@ Flyway와 백업 운영 절차는 [Flyway 마이그레이션 운영](../database
 ## 저장소 경로 정책
 
 - `HOST_STORAGE_PATH`는 반드시 프로젝트 외부 경로를 사용한다.
-- 기본 예시 경로는 `D:/presentation-coaching-storage`이다.
-- `D:/presentation-coaching-ai/storage`는 새 작업 저장 위치로 사용하지 않는다.
+- `.env.example`의 경로는 Windows 개발 환경용 예시이며 실제 환경에 맞게 변경한다.
+- 프로젝트 내부 `storage`는 새 작업 저장 위치로 사용하지 않는다.
 - compose는 `HOST_STORAGE_PATH`가 누락되면 시작 전에 오류를 낸다.
 - backend, analysis-engine, video-llm-engine는 모두 같은 host 경로를 `/app/storage`로 마운트한다.
 

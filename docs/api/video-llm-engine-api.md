@@ -110,7 +110,7 @@ NVIDIA/Ollama provider 호출 실패는 가능한 한 HTTP 500으로 전파하�
 - endpoint: `NVIDIA_API_BASE_URL`
 - 모델: `VIDEO_LLM_MODEL`
 - 인증: `Authorization: Bearer ${NVIDIA_API_KEY}`
-- 입력: 최대 16개 샘플 프레임의 `image_url` data URL
+- 입력: sampler는 최대 16개 프레임으로 제한한다. NVIDIA에는 `NVIDIA_MAX_IMAGES` 기본 8개만 전달하며 코드 상한은 10개다.
 - 원본 대용량 영상 직접 `video_url` 전송: 미구현
 
 `VIDEO_LLM_PROVIDER=OLLAMA`이면 `QwenVlRunner`가 Ollama `/api/generate`를 호출한다.

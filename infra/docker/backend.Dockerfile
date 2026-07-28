@@ -1,8 +1,9 @@
 # 역할: backend 서비스를 컨테이너 이미지로 빌드하는 Docker 설정입니다.
-FROM gradle:8.10.2-jdk21 AS build
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 COPY . .
-RUN gradle bootJar --no-daemon
+RUN chmod +x gradlew \
+    && ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre
 RUN apt-get update \

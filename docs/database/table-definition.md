@@ -1,6 +1,6 @@
 # 테이블 정의
 
-테이블 구조는 JPA 엔티티 기준이다. `infra/mysql/init.sql`은 테이블을 새로 만들지 않고, 기존 `final_analysis_results`가 있을 때 JSON 문자열 컬럼을 `LONGTEXT NOT NULL`로 보정한다.
+테이블 구조는 Flyway `V1__baseline_schema.sql`과 JPA Entity 기준이다. `infra/mysql/init.sql`은 문자셋만 설정하며 애플리케이션 테이블 생성과 변경은 Backend Flyway가 담당한다.
 
 ## `users`
 
@@ -83,6 +83,4 @@
 
 `scores_json`, `feedback_json`, `summary_json`은 JPA에서 `@Lob` 및 `columnDefinition = "LONGTEXT"`로 선언되어 있다. API 응답 시 `ObjectMapper`로 다시 `List<Map<String,Object>>` 또는 `Map<String,Object>`로 파싱한다.
 
-기존 MySQL 볼륨에는 `infra/mysql/migrations/20260724_add_analysis_recovery_columns.sql`을 적용한다.
-기본 Docker 개발 프로필은 Hibernate `ddl-auto=update`로 컬럼을 추가하지만, `prod` 프로필은
-`ddl-auto=validate`이므로 migration을 먼저 실행해야 한다.
+Hibernate는 모든 프로필에서 `ddl-auto=validate`를 사용하며 스키마를 자동 변경하지 않는다. 기존 migration은 수정하지 않고 새 변경은 다음 `V{n}__description.sql`로 추가한다. recovery 컬럼이 없는 Flyway 이전 볼륨의 전환 절차는 `infra/mysql/migrations/20260724_add_analysis_recovery_columns.sql`과 [Flyway 운영 문서](flyway-migrations.md)를 따른다.

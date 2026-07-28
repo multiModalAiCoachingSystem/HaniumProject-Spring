@@ -39,7 +39,7 @@ function PublicHome() {
           <p className="section-kicker">발표 코칭 리포트</p>
           <h1>발표 연습, 이제 데이터로 점검하세요</h1>
           <p className="lead-text">
-            MulMoCo는 발표자의 말하기, 시선, 자세, 제스처을 함께 보고
+            피치메이트는 발표자의 말하기, 시선, 자세, 제스처를 함께 보고
             점수와 시간대별 피드백을 한 화면에 정리하는 발표 연습 플랫폼입니다.
           </p>
           <div className="action-row">
@@ -49,7 +49,7 @@ function PublicHome() {
           <div className="trust-row">
             <span>500MB 업로드 제한</span>
             <span>JWT 인증</span>
-            <span>Mock AI 전체 흐름 지원</span>
+            <span>5개 핵심 항목 분석</span>
           </div>
         </div>
         <ProductPreview />
@@ -133,7 +133,7 @@ function AdminWorkspace({ user }) {
       <div className="workspace-hero admin-mode">
         <div>
           <p className="section-kicker">운영 대시보드</p>
-          <h1>MulMoCo 운영 현황</h1>
+          <h1>피치메이트 운영 현황</h1>
           <p className="lead-text">{user.nickname || '관리자'}님, 분석 파이프라인과 사용자 상태를 빠르게 점검하세요.</p>
         </div>
         <Link className="primary-link large" to="/admin">운영 콘솔 열기</Link>
@@ -141,9 +141,9 @@ function AdminWorkspace({ user }) {
 
       <div className="ops-summary">
         <StatusCard label="Backend" value="UP" tone="ok" />
-        <StatusCard label="Analysis Engine" value="MOCK" tone="info" />
-        <StatusCard label="Video LLM" value="MOCK" tone="info" />
-        <StatusCard label="Storage" value="/data" tone="neutral" />
+        <StatusCard label="Analysis Engine" value="연동" tone="info" />
+        <StatusCard label="Video LLM" value="연동" tone="info" />
+        <StatusCard label="Storage" value="/app/storage" tone="neutral" />
       </div>
 
       <div className="workspace-grid">
@@ -155,7 +155,7 @@ function AdminWorkspace({ user }) {
         <Link className="feature-panel" to="/admin">
           <span className="panel-label">Jobs</span>
           <h2>분석 작업 추적</h2>
-          <p>QUEUED, PROCESSING, DONE, FAILED 상태를 모니터링합니다.</p>
+          <p>대기, 처리, 취소 요청, 취소, 완료, 실패 상태를 모니터링합니다.</p>
         </Link>
         <Link className="feature-panel" to="/admin">
           <span className="panel-label">Failures</span>
@@ -177,7 +177,7 @@ function AdminWorkspace({ user }) {
 // 함수 역할: ProductPreview 화면 구성 요소를 렌더링하고 필요한 사용자 흐름을 연결합니다.
 function ProductPreview() {
   return (
-    <aside className="product-preview" aria-label="MulMoCo 리포트 미리보기">
+    <aside className="product-preview" aria-label="피치메이트 리포트 미리보기">
       <div className="preview-topbar">
         <span />
         <span />

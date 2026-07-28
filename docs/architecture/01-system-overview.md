@@ -11,10 +11,10 @@
 | frontend | React 18, Vite, Axios, React Router | 업로드, 분석 상태, 결과, 운영 콘솔 화면 |
 | backend | Spring Boot 3.3.5, Java 21, Spring Security, JPA | 인증, 영상 저장, 분석 작업 상태, 엔진 호출, 결과 저장 |
 | analysis-engine | FastAPI, faster-whisper, OpenCV, MediaPipe | STT, 음성/자세/시선/표정 지표, 점수 계산 |
-| video-llm-engine | FastAPI, ffmpeg, Ollama 호출 | 샘플 프레임 추출, Qwen-VL 기반 시각 관찰 피드백 |
+| video-llm-engine | FastAPI, ffmpeg, NVIDIA NIM, Ollama | 최대 8개 샘플 프레임, Nemotron 관찰, Qwen-VL fallback |
 | mysql | MySQL 8.4 | 사용자, 영상, 분석 작업, 최종 결과 저장 |
 | nginx | nginx 1.27 | `/api`는 backend, 그 외는 frontend로 프록시 |
-| storage | `/data` 볼륨 | 업로드 영상, 변환 영상, 분석 산출물 저장 |
+| storage | 호스트 bind mount → `/app/storage` | 업로드 영상, 변환 영상, 분석 산출물 공유 |
 
 ## 전체 구조
 
@@ -24,12 +24,14 @@ flowchart LR
     Nginx --> Frontend["frontend nginx static"]
     Nginx --> Backend["Spring Boot backend:8080"]
     Backend --> MySQL["MySQL 8.4"]
-    Backend --> Storage["공유 storage /data"]
+    Backend --> Storage["공유 storage /app/storage"]
     Backend --> Analysis["analysis-engine:8001"]
     Backend --> VideoLLM["video-llm-engine:8002"]
     Analysis --> Storage
     VideoLLM --> Storage
-    VideoLLM --> Ollama["Ollama /api/generate"]
+    VideoLLM --> Nvidia["NVIDIA Nemotron"]
+    VideoLLM -. 실패 시 .-> OllamaVision["Ollama qwen3-vl:4b"]
+    Backend --> OllamaText["Ollama qwen3:4b"]
 ```
 
 ## 프론트엔드 페이지와 라우터
@@ -55,6 +57,7 @@ flowchart LR
 
 ## 미구현/주의
 
-- 프론트엔드 `MetricScoreList`, `RadarScoreChart`, `VideoPlayer` 컴포넌트는 placeholder이다.
+- `ResultDetailPage`와 `AdminPage`는 route-level lazy loading을 사용한다. Recharts는 상세 리포트 청크에만 포함된다.
 - 운영 콘솔의 시스템 로그는 `AdminPage.jsx`의 `SYSTEM_LOGS` 상수 기반 mock 데이터이다.
-- 백엔드의 `OpenAiClient`, `OpenAiPromptBuilder`, `OpenAiResponseParser`, `FeedbackGenerateService` 등은 빈 클래스 또는 미구현 상태이다.
+- `/api/admin/health`의 분석 엔진 상태는 실제 health 호출이 아닌 `MOCK` 값이다.
+- Text LLM `OPENAI` provider의 실제 호출은 미구현이다. 현재 `OLLAMA`와 결정적 fallback을 사용한다.

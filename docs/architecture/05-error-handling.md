@@ -47,7 +47,7 @@ sequenceDiagram
     UI->>BE: POST /api/analyses/{jobId}/retry
     BE->>DB: job row pessimistic write lock
     BE->>BE: 소유자 확인
-    BE->>BE: status == FAILED 확인
+    BE->>BE: status == FAILED 또는 CANCELED 확인
     BE->>FS: 원본 영상 존재 확인
     BE->>DB: 기존 final result 삭제
     BE->>DB: job.retry()
@@ -59,9 +59,9 @@ sequenceDiagram
 ## 재시도 가능 조건
 
 - 요청자는 job 소유자여야 한다.
-- 현재 상태가 `FAILED`여야 한다.
-- `QUEUED` 또는 `PROCESSING`이면 `ANALYSIS_ALREADY_RUNNING`
-- `FAILED`가 아니면 `ANALYSIS_RETRY_NOT_ALLOWED`
+- 현재 상태가 `FAILED` 또는 `CANCELED`여야 한다.
+- `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED`이면 `ANALYSIS_ALREADY_RUNNING`
+- `FAILED`, `CANCELED`가 아니면 `ANALYSIS_RETRY_NOT_ALLOWED`
 - 원본 영상 파일이 없으면 `ANALYSIS_SOURCE_VIDEO_MISSING`
 
 ## 현재 한계

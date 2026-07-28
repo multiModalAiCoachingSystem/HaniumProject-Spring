@@ -2,6 +2,21 @@
 
 공통 base URL은 `/api`이다. 프론트엔드 `frontend/src/api/httpClient.js`는 `baseURL: "/api"`와 `Authorization: Bearer <accessToken>` 헤더를 사용한다. 응답 래퍼는 `ApiResponse<T>`이며 구조는 `docs/api/response-format.md`를 따른다.
 
+## Rate Limit
+
+| 대상 | 기본 제한 | 기준 |
+|---|---:|---|
+| 로그인 | 분당 10회 | IP |
+| 회원가입 | 시간당 5회 | IP |
+| token refresh | 분당 20회 | IP |
+| 영상 업로드 | 시간당 20회 | 사용자, 미인증 시 IP |
+| 분석 시작 | 시간당 20회 | 사용자 |
+| 재시도 | 시간당 10회 | 사용자 |
+| 관리자 API | 분당 60회 | principal |
+| 그 외 API | 분당 120회 | principal 또는 IP |
+
+값은 `infra/docker/.env.example`의 `RATE_LIMIT_*` 변수로 조정한다. 초과하면 HTTP 429와 `RATE_LIMIT_EXCEEDED`를 반환한다. `OPTIONS`와 `/api/health`는 제한 대상이 아니다.
+
 ## 인증 API
 
 | Method | URL | 인증 | Controller | Service | 소유권 검증 |
@@ -35,7 +50,7 @@
     "email": "user@example.com",
     "nickname": "발표자",
     "role": "USER",
-    "createdAt": "2026-07-07T19:00:00"
+    "createdAt": "2026-07-07T19:00:00+09:00"
   },
   "message": "회원가입이 완료되었습니다.",
   "errorCode": null
@@ -96,7 +111,7 @@
     "mimeType": "video/mp4",
     "fileSize": 10485760,
     "durationSeconds": null,
-    "createdAt": "2026-07-07T19:00:00"
+    "createdAt": "2026-07-07T19:00:00+09:00"
   },
   "message": "영상이 업로드되었습니다.",
   "errorCode": null
@@ -116,6 +131,7 @@
 | GET | `/api/analyses/reports` | 필요 | `AnalysisController.reports` | `AnalysisQueryService.reports` | `ADMIN`은 전체, 그 외 본인만 |
 | GET | `/api/analyses/{jobId}/status` | 필요 | `AnalysisController.status` | `AnalysisQueryService.status` | 본인 또는 `ADMIN` |
 | POST | `/api/analyses/{jobId}/retry` | 필요 | `AnalysisController.retry` | `AnalysisCommandService.retry` | 본인만 |
+| POST | `/api/analyses/{jobId}/cancel` | 필요 | `AnalysisController.cancel` | `AnalysisCommandService.cancel` | 본인만 |
 | DELETE | `/api/analyses/{jobId}` | 필요 | `AnalysisController.delete` | `AnalysisCommandService.deleteReport` | 본인 또는 `ADMIN` |
 | GET | `/api/analyses/{jobId}/result` | 필요 | `AnalysisController.result` | `ResultQueryService.detailByJobId` | 본인 또는 `ADMIN` |
 
@@ -159,8 +175,8 @@
         "status": "DONE",
         "retryCount": 0,
         "totalScore": 82.5,
-        "createdAt": "2026-07-07T19:00:00",
-        "completedAt": "2026-07-07T19:02:00",
+        "createdAt": "2026-07-07T19:00:00+09:00",
+        "completedAt": "2026-07-07T19:02:00+09:00",
         "failedAt": null,
         "failureReason": null
       }
@@ -200,6 +216,35 @@
 
 오류 상태 코드: 403 `ACCESS_DENIED`; 404 `ANALYSIS_JOB_NOT_FOUND`; 409 `ANALYSIS_ALREADY_RUNNING`, `ANALYSIS_RETRY_NOT_ALLOWED`, `ANALYSIS_SOURCE_VIDEO_MISSING`
 
+허용 상태는 `FAILED`, `CANCELED`다. 동일한 `jobId`를 유지하고 기존 결과와 부분 산출물을 정리한 뒤 `QUEUED`로 전환한다.
+
+### POST `/api/analyses/{jobId}/cancel`
+
+요청 JSON: 없음
+
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": 20,
+    "status": "CANCEL_REQUESTED",
+    "message": "분석 중단을 요청했습니다."
+  },
+  "message": "분석 취소 요청이 처리되었습니다.",
+  "errorCode": null
+}
+```
+
+`QUEUED`는 `CANCELED`, `PROCESSING`은 `CANCEL_REQUESTED`가 된다. `CANCEL_REQUESTED`와 `CANCELED` 재요청은 멱등 성공이며 `DONE`, `FAILED`는 409다.
+
+오류 상태 코드: 403 `ACCESS_DENIED`; 404 `ANALYSIS_JOB_NOT_FOUND`; 409 `ANALYSIS_CANCEL_NOT_ALLOWED`
+
+### DELETE `/api/analyses/{jobId}`
+
+요청 JSON: 없음. `DONE`, `FAILED`, `CANCELED`만 삭제할 수 있다.
+
+오류 상태 코드: 403 `ACCESS_DENIED`; 404 `ANALYSIS_JOB_NOT_FOUND`; 409 `ANALYSIS_DELETE_NOT_ALLOWED`
+
 ## 결과 API
 
 | Method | URL | 인증 | Controller | Service | 소유권 검증 |
@@ -220,7 +265,13 @@
 | PATCH | `/api/admin/users/{userId}/role` | `ADMIN`/`MANAGER` | `AdminController.updateUserRole` | Repository 직접 사용 | `ADMIN`만 허용 |
 | DELETE | `/api/admin/users/{userId}` | `ADMIN`/`MANAGER` | `AdminController.expelUser` | Repository 직접 사용 | `ADMIN`만 허용 |
 | GET | `/api/admin/analyses` | `ADMIN`/`MANAGER` | `AdminController.analyses` | Repository 직접 사용 | 운영 권한 |
-| DELETE | `/api/admin/analyses/{jobId}` | `ADMIN`/`MANAGER` | `AdminController.deleteAnalysis` | Repository 직접 사용 | 운영 권한 |
+| DELETE | `/api/admin/analyses/{jobId}` | `ADMIN`/`MANAGER` | `AdminController.deleteAnalysis` | `AnalysisCommandService.deleteReport` | `ADMIN`만 소유권 생략 |
 | GET | `/api/admin/health` | `ADMIN`/`MANAGER` | `AdminController.health` | 없음 | 운영 권한 |
 
 `/api/admin/health`는 현재 `analysisEngine`과 `videoLlmEngine`을 실제 healthcheck로 호출하지 않고 `"MOCK"` 문자열을 반환한다.
+
+관리자 분석 삭제도 공통 삭제 Service와 `DONE`, `FAILED`, `CANCELED` 상태 제한을 사용한다. `MANAGER`는 endpoint 접근은 가능하지만 공통 Service에서 임의 사용자 job의 소유권 검사를 생략하지 않는다.
+
+## 날짜 형식
+
+날짜 응답 DTO는 `OffsetDateTime`을 사용하며 서비스 시간대 offset을 포함한다. 예: `"2026-07-07T19:00:00+09:00"`. 프론트는 `Asia/Seoul`로 표시하며 timezone 정보 없는 문자열을 임의로 UTC로 추측하지 않는다.

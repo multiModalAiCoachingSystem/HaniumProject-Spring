@@ -44,7 +44,7 @@ Storage 기본 백업 대상:
 
 ```powershell
 .\scripts\backup\backup-mysql.ps1 `
-  -BackupRoot 'D:\presentation-coaching-backups'
+  -BackupRoot '<프로젝트-외부-백업-경로>'
 ```
 
 ## 통합 백업
@@ -73,7 +73,7 @@ manifest에는 파일명, 크기, 생성 시각, Git commit, Flyway/schema 버�
 
 ```powershell
 .\scripts\backup\restore-mysql.ps1 `
-  -DumpFile 'D:\presentation-coaching-backups\database\presentation_coaching_ai_YYYYMMDD_HHMMSS.sql'
+  -DumpFile '<백업-경로>\database\presentation_coaching_ai_YYYYMMDD_HHMMSS.sql'
 ```
 
 프롬프트에 다음 형식으로 입력한다.
@@ -92,9 +92,9 @@ RESTORE presentation_coaching_ai
 
 ```powershell
 .\scripts\backup\restore-storage.ps1 `
-  -ArchiveFile 'D:\presentation-coaching-backups\sets\YYYYMMDD_HHMMSS\storage_YYYYMMDD_HHMMSS.zip' `
-  -ChecksumFile 'D:\presentation-coaching-backups\sets\YYYYMMDD_HHMMSS\checksums.sha256' `
-  -TargetDirectory 'D:\presentation-coaching-storage-restore'
+  -ArchiveFile '<백업-경로>\sets\YYYYMMDD_HHMMSS\storage_YYYYMMDD_HHMMSS.zip' `
+  -ChecksumFile '<백업-경로>\sets\YYYYMMDD_HHMMSS\checksums.sha256' `
+  -TargetDirectory '<복원-검증-storage-경로>'
 ```
 
 스크립트는 checksum, archive 열기, 절대경로와 `..` 경로를 검사한다. 복원 후 원본과 파일 수 및 총 바이트를 비교한 뒤 서비스 mount를 전환한다.
@@ -125,7 +125,7 @@ Retention은 성공한 최종 파일 또는 세트만 대상으로 한다. `.par
 이번 구현은 작업을 자동 등록하지 않는다. 매일 새벽 2시 등록 예시는 다음과 같다.
 
 ```powershell
-$projectRoot = 'D:\presentation-coaching-ai'
+$projectRoot = '<프로젝트-루트>'
 $action = New-ScheduledTaskAction `
   -Execute 'powershell.exe' `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$projectRoot\scripts\backup\backup-all.ps1`""
@@ -151,4 +151,3 @@ Register-ScheduledTask `
 - storage 파일: 원본 63개, 복원 63개
 - storage 총 바이트: 원본과 복원 일치
 - 검증용 임시 DB, 컨테이너, storage 복사본: 검증 후 제거
-

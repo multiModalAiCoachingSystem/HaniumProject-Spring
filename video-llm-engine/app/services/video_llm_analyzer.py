@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from app.core.config import settings
@@ -9,6 +10,7 @@ from app.model.qwen_vl_runner import QwenVlRunner
 from app.services.video_sampler import VideoSampler
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class VideoLlmAnalyzer:
@@ -25,6 +27,8 @@ class VideoLlmAnalyzer:
         self.fallback_provider = settings.video_llm_fallback_provider.upper()
 
     def analyze(self, job_id: int, video_id: int, file_path: str) -> dict:
+        started = time.perf_counter()
+        logger.info("[VIDEO_LLM] 비디오 LLM 분석을 시작합니다. jobId=%s", job_id)
         samples = self.sampler.prepare_samples(job_id=job_id, file_path=file_path)
         metadata = samples["metadata"]
         frames = samples["sampledFrames"]
@@ -33,7 +37,7 @@ class VideoLlmAnalyzer:
         requested_model = self._requested_model(requested_provider)
         request_started_at = self._utc_now()
         logger.info(
-            "Video LLM request started: jobId=%s requestedProvider=%s requestedModel=%s "
+            "[VIDEO_LLM] Provider를 선택했습니다. jobId=%s requestedProvider=%s requestedModel=%s "
             "inputType=IMAGE_FRAMES frameCount=%s",
             job_id,
             requested_provider,
@@ -62,9 +66,9 @@ class VideoLlmAnalyzer:
             response_metadata.pop("fallbackReason", None)
 
         logger.info(
-            "Video LLM completed: jobId=%s requestedProvider=%s actualProvider=%s "
+            "[VIDEO_LLM] 비디오 LLM 분석이 끝났습니다. jobId=%s requestedProvider=%s actualProvider=%s "
             "requestedModel=%s actualModel=%s fallbackUsed=%s fallbackReason=%s "
-            "requestStartedAt=%s requestCompletedAt=%s",
+            "requestStartedAt=%s requestCompletedAt=%s elapsed=%.2fs",
             job_id,
             requested_provider,
             result["provider"],
@@ -74,6 +78,7 @@ class VideoLlmAnalyzer:
             response_metadata.get("fallbackReason", ""),
             request_started_at,
             request_completed_at,
+            time.perf_counter() - started,
         )
 
         return {
@@ -95,8 +100,10 @@ class VideoLlmAnalyzer:
                 fallback_reason = self._nvidia_fallback_reason(exc)
                 fallback_status_code = getattr(exc, "status_code", None)
                 logger.warning(
-                    "Video LLM provider failed. jobId=%s provider=NVIDIA_NIM fallbackReason=%s statusCode=%s",
+                    "[VIDEO_LLM] NVIDIA 호출에 실패하여 fallback을 사용합니다. "
+                    "jobId=%s provider=NVIDIA_NIM fallbackProvider=%s reason=%s statusCode=%s",
                     job_id,
+                    self.fallback_provider,
                     fallback_reason,
                     fallback_status_code or "",
                 )
@@ -122,7 +129,7 @@ class VideoLlmAnalyzer:
         if provider == "NONE":
             return self._fallback_result(metadata, frames, fallback_from="NONE", fallback_reason="PROVIDER_NONE")
 
-        logger.warning("Unsupported Video LLM provider. jobId=%s provider=%s", job_id, provider)
+        logger.warning("[VIDEO_LLM] 지원하지 않는 Provider라 fallback을 사용합니다. jobId=%s provider=%s", job_id, provider)
         return self._fallback_result(metadata, frames, fallback_from=provider, fallback_reason="UNSUPPORTED_PROVIDER")
 
     def _ollama_result(

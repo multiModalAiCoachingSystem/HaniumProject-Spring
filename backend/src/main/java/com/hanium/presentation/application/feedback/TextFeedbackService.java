@@ -45,25 +45,27 @@ public class TextFeedbackService {
             return fallback(basic, provider, model, "text_llm_disabled");
         }
         if ("OPENAI".equals(provider)) {
-            log.info("Text LLM OPENAI provider is not implemented yet. jobId={}", jobId);
+            log.warn("[FEEDBACK] OPENAI Provider가 미구현되어 fallback을 사용합니다. jobId={}", jobId);
             return fallback(basic, provider, model, "openai_provider_not_implemented");
         }
         if (!"OLLAMA".equals(provider)) {
-            log.warn("Unsupported Text LLM provider. jobId={} provider={}", jobId, provider);
+            log.warn("[FEEDBACK] 지원하지 않는 Provider라 fallback을 사용합니다. jobId={} provider={}", jobId, provider);
             return fallback(basic, provider, model, "unsupported_provider");
         }
 
         try {
+            log.info("[FEEDBACK] 한국어 피드백을 생성하고 있습니다. jobId={} provider={} model={}",
+                    jobId, provider, model);
             String prompt = promptBuilder.build(basic, videoLlm);
             String rawResponse = ollamaClient.generate(prompt);
             Map<String, Object> parsed = parseJsonObject(rawResponse);
             Map<String, Object> normalized = normalizePayload(parsed, fallbackPayload(basic));
-            log.info("Text LLM feedback generated. jobId={} provider={} model={} fallback=false",
+            log.info("[FEEDBACK] 한국어 피드백을 생성했습니다. jobId={} provider={} model={} fallback=false",
                     jobId, provider, model);
             return TextFeedbackResult.success(normalized, provider, model);
         } catch (Exception exception) {
-            log.warn("Text LLM feedback fallback used. jobId={} provider={} model={} reason={}: {}",
-                    jobId, provider, model, exception.getClass().getSimpleName(), exception.getMessage());
+            log.warn("[FEEDBACK] 피드백 생성 fallback을 사용합니다. jobId={} provider={} model={} reason={}",
+                    jobId, provider, model, exception.getClass().getSimpleName());
             return fallback(basic, provider, model, "text_llm_generation_failed");
         }
     }

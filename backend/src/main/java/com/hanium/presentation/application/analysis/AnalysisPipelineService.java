@@ -72,11 +72,12 @@ public class AnalysisPipelineService {
     public void runAnalysis(Long jobId) {
         try {
             if (!claimQueuedForProcessing(jobId)) {
-                log.info("Analysis execution skipped because job was not claimable. jobId={}", jobId);
+                log.info("[JOB] 실행 가능한 대기 작업이 아니어서 분석을 건너뜁니다. jobId={}", jobId);
                 return;
             }
+            log.info("[JOB] 분석을 시작합니다. jobId={} status=PROCESSING", jobId);
         } catch (RuntimeException exception) {
-            log.warn("Analysis claim failed. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
+            log.warn("[JOB] 분석 작업 상태 전환에 실패했습니다. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
             return;
         }
         executeAnalysis(jobId);
@@ -86,11 +87,12 @@ public class AnalysisPipelineService {
     public void runRecoveredAnalysis(Long jobId) {
         try {
             if (!isRecoveredJobRunnable(jobId)) {
-                log.info("Recovered analysis execution skipped because status changed. jobId={}", jobId);
+                log.info("[RECOVERY] 상태가 변경되어 복구 분석을 건너뜁니다. jobId={}", jobId);
                 return;
             }
+            log.info("[RECOVERY] 복구된 분석을 시작합니다. jobId={}", jobId);
         } catch (RuntimeException exception) {
-            log.warn("Recovered analysis validation failed. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
+            log.warn("[RECOVERY] 복구 작업 검증에 실패했습니다. jobId={} reason=DATABASE_CLAIM_ERROR", jobId);
             return;
         }
         executeAnalysis(jobId);
@@ -102,6 +104,7 @@ public class AnalysisPipelineService {
         double videoLlmSeconds = 0.0;
         double textFeedbackSeconds = 0.0;
         double resultSaveSeconds = 0.0;
+        log.info("[ANALYSIS] 전체 분석 파이프라인을 시작합니다. jobId={}", jobId);
         try {
             if (stopIfCancellationRequested(jobId)) return;
 
@@ -123,7 +126,7 @@ public class AnalysisPipelineService {
 
             if (!update(jobId, AnalysisStep.VIDEO_LLM_ANALYSIS, 75, "영상 장면을 AI가 관찰하고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
-            log.info("Video LLM engine request started. jobId={} videoId={}", job.getId(), video.getId());
+            log.info("[VIDEO_LLM] 비디오 LLM 분석을 시작합니다. jobId={}", job.getId());
             long videoLlmStarted = System.nanoTime();
             VideoLlmEngineResponse videoLlm = videoLlmEngineClient.analyze(
                     new VideoLlmEngineRequest(job.getId(), video.getId(), filePath)
@@ -132,32 +135,43 @@ public class AnalysisPipelineService {
             if (videoLlm == null) {
                 throw new IllegalStateException("video-llm-engine returned empty response");
             }
-            log.info("Video LLM engine request completed. jobId={} provider={} model={} fallbackUsed={}",
-                    job.getId(), videoLlm.provider(), videoLlm.model(), videoLlmFallbackUsed(videoLlm));
+            log.info("[VIDEO_LLM] 비디오 LLM 분석이 끝났습니다. jobId={} provider={} model={} "
+                            + "fallbackUsed={} elapsed={}s",
+                    job.getId(), videoLlm.provider(), videoLlm.model(), videoLlmFallbackUsed(videoLlm),
+                    roundSeconds(videoLlmSeconds));
             if (stopIfCancellationRequested(jobId)) return;
 
             if (!update(jobId, AnalysisStep.RESULT_MERGING, 90, "분석 결과를 합치고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
+            log.info("[FEEDBACK] 발표 피드백 생성을 시작합니다. jobId={}", jobId);
             long textFeedbackStarted = System.nanoTime();
             TextFeedbackResult textFeedback = generateTextFeedbackSafely(jobId, basic, videoLlm);
             textFeedbackSeconds = elapsedSeconds(textFeedbackStarted);
+            log.info("[FEEDBACK] 발표 피드백 생성이 끝났습니다. jobId={} provider={} model={} "
+                            + "fallbackUsed={} elapsed={}s",
+                    jobId, textFeedback.provider(), textFeedback.model(), textFeedback.fallback(),
+                    roundSeconds(textFeedbackSeconds));
             if (stopIfCancellationRequested(jobId)) return;
+            log.info("[RESULT] 분석 결과 저장을 시작합니다. jobId={}", jobId);
             long resultSaveStarted = System.nanoTime();
             if (!saveEngineResult(jobId, basic, videoLlm, textFeedback)) return;
             resultSaveSeconds = elapsedSeconds(resultSaveStarted);
+            log.info("[RESULT] 분석 결과 저장이 끝났습니다. jobId={} elapsed={}s",
+                    jobId, roundSeconds(resultSaveSeconds));
             if (stopIfCancellationRequested(jobId)) return;
             complete(jobId);
         } catch (Exception exception) {
             if (stopIfCancellationRequested(jobId)) {
-                log.info("Analysis cancelled before failure handling. jobId={}", jobId);
+                log.info("[ANALYSIS] 실패 처리 전에 취소 상태를 확인했습니다. jobId={}", jobId);
                 return;
             }
-            log.error("Analysis failed. jobId={}", jobId, exception);
-            fail(jobId, AnalysisFailureMessages.safeMessageFrom(exception));
+            String safeReason = AnalysisFailureMessages.safeMessageFrom(exception);
+            log.error("[ANALYSIS] 분석 중 오류가 발생했습니다. jobId={} reason={}", jobId, safeReason);
+            fail(jobId, safeReason);
         } finally {
             log.info(
-                    "Analysis pipeline performance: jobId={} analysisEngineSeconds={} videoLlmSeconds={} "
-                            + "textFeedbackSeconds={} resultSaveSeconds={} totalSeconds={}",
+                    "[ANALYSIS] 전체 분석 파이프라인이 끝났습니다. jobId={} analysisEngineSeconds={} "
+                            + "videoLlmSeconds={} textFeedbackSeconds={} resultSaveSeconds={} totalSeconds={}",
                     jobId,
                     roundSeconds(analysisEngineSeconds),
                     roundSeconds(videoLlmSeconds),
@@ -226,7 +240,7 @@ public class AnalysisPipelineService {
 
             try {
                 resultRepository.findByJobId(jobId).ifPresent(existing -> {
-                    log.warn("Replacing existing final analysis result before saving new engine result. jobId={} resultId={}",
+                    log.warn("[RESULT] 기존 결과를 최신 결과로 교체합니다. jobId={} resultId={}",
                             jobId, existing.getId());
                     resultRepository.deleteByJobId(jobId);
                 });
@@ -253,6 +267,7 @@ public class AnalysisPipelineService {
             boolean completed = job.done();
             if (completed) {
                 analysisJobRepository.save(job);
+                log.info("[JOB] 분석이 완료되었습니다. jobId={} status={}", job.getId(), job.getStatus());
             }
             return completed;
         });
@@ -269,6 +284,8 @@ public class AnalysisPipelineService {
                 }
                 if (job.fail(message)) {
                     analysisJobRepository.save(job);
+                    log.error("[JOB] 분석이 실패했습니다. jobId={} status={} reason={}",
+                            job.getId(), job.getStatus(), message);
                 }
             });
             return null;
@@ -287,11 +304,11 @@ public class AnalysisPipelineService {
             job.cancel();
             analysisJobRepository.save(job);
             cleanupAnalysisArtifactsAfterCommit(job.getId());
-            log.info("Analysis cancellation completed. jobId={} status={}", job.getId(), job.getStatus());
+            log.info("[JOB] 분석이 취소되었습니다. jobId={} status={}", job.getId(), job.getStatus());
             return true;
         }
         if (job.getStatus() == AnalysisStatus.CANCELED) {
-            log.info("Analysis already cancelled. jobId={} status={}", job.getId(), job.getStatus());
+            log.debug("[JOB] 이미 취소된 작업입니다. jobId={} status={}", job.getId(), job.getStatus());
             return true;
         }
         return false;
@@ -322,8 +339,8 @@ public class AnalysisPipelineService {
                 return result;
             }
         } catch (Exception exception) {
-            log.warn("Text LLM feedback service failed unexpectedly. jobId={} reason={}: {}",
-                    jobId, exception.getClass().getSimpleName(), exception.getMessage());
+            log.warn("[FEEDBACK] 피드백 서비스 오류로 fallback을 사용합니다. jobId={} reason={}",
+                    jobId, exception.getClass().getSimpleName());
         }
         return textFeedbackService.fallback(basic, "NONE", "", "text_feedback_service_unavailable");
     }

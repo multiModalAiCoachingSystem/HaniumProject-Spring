@@ -20,6 +20,8 @@ import com.hanium.presentation.presentation.dto.response.AnalysisStartResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @Service
 public class AnalysisCommandService {
+    private static final Logger log = LoggerFactory.getLogger(AnalysisCommandService.class);
     private static final List<AnalysisStatus> ACTIVE_STATUSES = List.of(
             AnalysisStatus.QUEUED,
             AnalysisStatus.PROCESSING,
@@ -63,6 +66,7 @@ public class AnalysisCommandService {
         UploadedVideo video = videoFileQueryService.loadOwnedVideoForUpdate(user, videoId);
         rejectWhenActiveJobExists(video.getId(), null);
         AnalysisJob job = analysisJobRepository.save(new AnalysisJob(user, video));
+        log.info("[JOB] 분석 작업이 생성되었습니다. jobId={} status={}", job.getId(), job.getStatus());
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             // 함수 역할: afterCommit에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
             @Override
@@ -85,12 +89,14 @@ public class AnalysisCommandService {
         if (job.getStatus() == AnalysisStatus.QUEUED) {
             job.cancel();
             analysisJobRepository.save(job);
+            log.info("[JOB] 분석이 취소되었습니다. jobId={} status={}", job.getId(), job.getStatus());
             return new AnalysisCancelResponse(job.getId(), job.getStatus().name(), "분석이 취소되었습니다.");
         }
 
         if (job.getStatus() == AnalysisStatus.PROCESSING) {
             job.requestCancel();
             analysisJobRepository.save(job);
+            log.info("[JOB] 취소가 요청되었습니다. jobId={} status={}", job.getId(), job.getStatus());
             return new AnalysisCancelResponse(job.getId(), job.getStatus().name(), "분석 중단을 요청했습니다.");
         }
 
@@ -141,6 +147,8 @@ public class AnalysisCommandService {
         resultRepository.deleteByJobId(job.getId());
         job.retry();
         analysisJobRepository.save(job);
+        log.warn("[JOB] 재분석을 시작합니다. jobId={} status={} retryCount={}",
+                job.getId(), job.getStatus(), job.getRetryCount());
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             // 함수 역할: afterCommit에서 재시도 상태 저장 후 분석 파이프라인을 실행합니다.

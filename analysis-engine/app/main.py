@@ -12,6 +12,16 @@ from app.services.vision_metrics import mediapipe_capabilities
 
 logger = logging.getLogger("uvicorn.error")
 
+
+def configure_app_logging() -> None:
+    app_logger = logging.getLogger("app")
+    app_logger.handlers = list(logging.getLogger("uvicorn").handlers)
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
+
+
+configure_app_logging()
+
 app = FastAPI(title="MulMoCo Analysis Engine")
 app.include_router(health_router)
 app.include_router(basic_analysis_router)

@@ -13,7 +13,8 @@ from app.services.stt_service import SttService
 from app.services.video_info import VideoInfoService
 
 
-logger = logging.getLogger("uvicorn.error")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class BasicAnalyzer:
@@ -30,36 +31,156 @@ class BasicAnalyzer:
 
     # 함수 역할: 영상 정보 확인, STT 처리, 지표 추출, 점수 계산, 응답 데이터 구성 과정을 전체적으로 조정합니다.
     def analyze(self, job_id: int, video_id: int, file_path: str, transcript: str | None = None) -> dict:
+        started = time.perf_counter()
+        logger.info("[ANALYSIS] 분석을 시작합니다. jobId=%s", job_id)
+        try:
+            result = self._analyze(job_id, video_id, file_path, transcript)
+        except Exception as exception:
+            logger.error(
+                "[ANALYSIS] 분석 중 오류가 발생했습니다. jobId=%s reason=%s",
+                job_id,
+                exception.__class__.__name__,
+            )
+            raise
+        logger.info(
+            "[ANALYSIS] 전체 분석이 끝났습니다. jobId=%s elapsed=%.2fs",
+            job_id,
+            time.perf_counter() - started,
+        )
+        return result
+
+    def _analyze(self, job_id: int, video_id: int, file_path: str, transcript: str | None = None) -> dict:
         total_started = time.perf_counter()
         resolved_video_path = str(self.video_info.resolve_path(file_path))
 
+        logger.info("[VIDEO] 영상 정보를 확인합니다. jobId=%s", job_id)
         probe_started = time.perf_counter()
         info = self.video_info.probe(resolved_video_path)
         probe_seconds = time.perf_counter() - probe_started
+        logger.info(
+            "[VIDEO] 영상 정보 확인이 끝났습니다. jobId=%s duration=%.1fs resolution=%sx%s fps=%s elapsed=%.2fs",
+            job_id,
+            info.durationSeconds,
+            info.width if info.width is not None else "unknown",
+            info.height if info.height is not None else "unknown",
+            info.fps if info.fps is not None else "unknown",
+            probe_seconds,
+        )
 
+        logger.info("[AUDIO] 음성 분석을 시작합니다. jobId=%s", job_id)
+        audio_pipeline_started = time.perf_counter()
         text_started = time.perf_counter()
+        logger.debug("[AUDIO] STT 분석을 시작합니다. jobId=%s", job_id)
         stt_result = self.stt.from_text(transcript) if transcript else self.stt.transcribe(resolved_video_path)
         effective_transcript = (transcript or stt_result.text or "").strip()
         text_seconds = time.perf_counter() - text_started
 
         metrics = {}
         audio_started = time.perf_counter()
+        logger.debug("[AUDIO] 말하기 속도와 침묵을 측정합니다. jobId=%s", job_id)
         metrics.update(self.audio.analyze(info.durationSeconds, effective_transcript, stt_result.confidence, resolved_video_path))
         audio_seconds = time.perf_counter() - audio_started
+        logger.info(
+            "[AUDIO] 측정 완료. jobId=%s speechSpeed=%.1fSPM fillerCount=%s pauseCount=%s",
+            job_id,
+            self._safe_float(metrics.get("speechSpeedSpm"), 0.0),
+            metrics.get("fillerWordCount", 0),
+            metrics.get("pauseCount", 0),
+        )
+        logger.info(
+            "[AUDIO] 음성 분석이 끝났습니다. jobId=%s elapsed=%.2fs",
+            job_id,
+            time.perf_counter() - audio_pipeline_started,
+        )
 
         vision_started = time.perf_counter()
+        posture_started = time.perf_counter()
+        logger.info("[POSTURE] 자세 분석을 시작합니다. jobId=%s", job_id)
         metrics.update(self.pose.analyze(info.durationSeconds, resolved_video_path))
+        logger.info(
+            "[POSTURE] 자세 분석이 끝났습니다. jobId=%s elapsed=%.2fs shoulderTilt=%.1fdeg stability=%.1f%%",
+            job_id,
+            time.perf_counter() - posture_started,
+            self._safe_float(metrics.get("shoulderTiltDegrees"), 0.0),
+            self._safe_float(metrics.get("postureStabilityRatio"), 0.0) * 100.0,
+        )
+
+        gaze_started = time.perf_counter()
+        logger.info("[GAZE] 시선 분석을 시작합니다. jobId=%s", job_id)
         metrics.update(self.gaze.analyze(info.durationSeconds, resolved_video_path))
+        gaze_detection_ratio = self._safe_float(metrics.get("gazeDetectionRatio"), 0.0)
+        logger.info(
+            "[GAZE] 시선 분석이 끝났습니다. jobId=%s elapsed=%.2fs detectionRatio=%.1f%% eyeContactRatio=%.1f%%",
+            job_id,
+            time.perf_counter() - gaze_started,
+            gaze_detection_ratio * 100.0,
+            self._safe_float(metrics.get("eyeContactRatio"), 0.0) * 100.0,
+        )
+        if gaze_detection_ratio < 0.10:
+            logger.warning(
+                "[GAZE] 시선 분석 신뢰도가 낮습니다. jobId=%s detectionRatio=%.1f%%",
+                job_id,
+                gaze_detection_ratio * 100.0,
+            )
+
+        expression_started = time.perf_counter()
+        logger.info("[EXPRESSION] 표정 분석을 시작합니다. jobId=%s", job_id)
         metrics.update(self.face.analyze(info.durationSeconds, resolved_video_path))
+        face_detection_ratio = self._safe_float(metrics.get("faceDetectionRatio"), 0.0)
+        logger.info(
+            "[EXPRESSION] 표정 분석이 끝났습니다. jobId=%s elapsed=%.2fs faceDetection=%.1f%% natural=%.1f%% smile=%.1f%%",
+            job_id,
+            time.perf_counter() - expression_started,
+            face_detection_ratio * 100.0,
+            self._safe_float(metrics.get("naturalExpressionRatio"), 0.0) * 100.0,
+            self._safe_float(metrics.get("smileRatio"), 0.0) * 100.0,
+        )
+        if face_detection_ratio < 0.10:
+            logger.warning(
+                "[EXPRESSION] 얼굴 감지 신뢰도가 낮습니다. jobId=%s detectionRatio=%.1f%%",
+                job_id,
+                face_detection_ratio * 100.0,
+            )
         vision_seconds = time.perf_counter() - vision_started
 
         gesture_started = time.perf_counter()
+        logger.info("[GESTURE] 제스처 분석을 시작합니다. jobId=%s", job_id)
         metrics.update(self.gesture.analyze(info.durationSeconds, resolved_video_path))
         gesture_seconds = time.perf_counter() - gesture_started
+        logger.info(
+            "[GESTURE] 제스처 분석이 끝났습니다. jobId=%s elapsed=%.2fs movementRatio=%.1f%% gesturesPerMinute=%.1f",
+            job_id,
+            gesture_seconds,
+            self._safe_float(metrics.get("gestureMovementRatio"), 0.0) * 100.0,
+            self._safe_float(metrics.get("gestureCountPerMinute"), 0.0),
+        )
+        if bool(metrics.get("gestureAnalysisFallback")):
+            logger.warning(
+                "[GESTURE] 제스처 분석 fallback을 사용합니다. jobId=%s reason=%s",
+                job_id,
+                metrics.get("gestureAnalysisFallbackReason") or "GESTURE_ANALYSIS_UNAVAILABLE",
+            )
 
         score_started = time.perf_counter()
+        logger.info("[SCORE] 점수 측정을 시작합니다. jobId=%s", job_id)
         result = self.score_calculator.calculate(metrics)
         score_seconds = time.perf_counter() - score_started
+        score_items = {item.get("category"): item.get("score") for item in result.get("scores", [])}
+        logger.info(
+            "[SCORE] 항목 점수 계산 완료. jobId=%s posture=%s expression=%s gaze=%s voice=%s gesture=%s",
+            job_id,
+            score_items.get("POSTURE"),
+            score_items.get("EXPRESSION"),
+            score_items.get("EYE_CONTACT"),
+            score_items.get("VOICE"),
+            score_items.get("GESTURE"),
+        )
+        logger.info(
+            "[SCORE] 점수 측정이 끝났습니다. jobId=%s totalScore=%.1f elapsed=%.2fs",
+            job_id,
+            self._safe_float(result.get("totalScore"), 0.0),
+            score_seconds,
+        )
         self._merge_visual_score_metrics(metrics, result)
         total_seconds = time.perf_counter() - total_started
         performance = {
@@ -180,8 +301,8 @@ class BasicAnalyzer:
 
         fallback = bool(metrics.get("audioMetricsFallback"))
         if fallback:
-            logger.info(
-                "Audio metrics fallback: jobId=%s reason=%s",
+            logger.warning(
+                "[AUDIO] 음성 지표 fallback을 사용합니다. jobId=%s reason=%s",
                 job_id,
                 metrics.get("audioMetricsFallbackReason"),
             )

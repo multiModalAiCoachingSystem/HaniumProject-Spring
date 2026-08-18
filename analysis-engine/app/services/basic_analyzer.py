@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from app.services.audio_analyzer import AudioAnalyzer
 from app.services.face_analyzer import FaceAnalyzer
@@ -29,21 +30,64 @@ class BasicAnalyzer:
 
     # 함수 역할: 영상 정보 확인, STT 처리, 지표 추출, 점수 계산, 응답 데이터 구성 과정을 전체적으로 조정합니다.
     def analyze(self, job_id: int, video_id: int, file_path: str, transcript: str | None = None) -> dict:
+        total_started = time.perf_counter()
         resolved_video_path = str(self.video_info.resolve_path(file_path))
 
+        probe_started = time.perf_counter()
         info = self.video_info.probe(resolved_video_path)
+        probe_seconds = time.perf_counter() - probe_started
+
+        text_started = time.perf_counter()
         stt_result = self.stt.from_text(transcript) if transcript else self.stt.transcribe(resolved_video_path)
         effective_transcript = (transcript or stt_result.text or "").strip()
+        text_seconds = time.perf_counter() - text_started
 
         metrics = {}
+        audio_started = time.perf_counter()
         metrics.update(self.audio.analyze(info.durationSeconds, effective_transcript, stt_result.confidence, resolved_video_path))
+        audio_seconds = time.perf_counter() - audio_started
+
+        vision_started = time.perf_counter()
         metrics.update(self.pose.analyze(info.durationSeconds, resolved_video_path))
         metrics.update(self.gaze.analyze(info.durationSeconds, resolved_video_path))
         metrics.update(self.face.analyze(info.durationSeconds, resolved_video_path))
-        metrics.update(self.gesture.analyze(info.durationSeconds, resolved_video_path))
+        vision_seconds = time.perf_counter() - vision_started
 
+        gesture_started = time.perf_counter()
+        metrics.update(self.gesture.analyze(info.durationSeconds, resolved_video_path))
+        gesture_seconds = time.perf_counter() - gesture_started
+
+        score_started = time.perf_counter()
         result = self.score_calculator.calculate(metrics)
+        score_seconds = time.perf_counter() - score_started
         self._merge_visual_score_metrics(metrics, result)
+        total_seconds = time.perf_counter() - total_started
+        performance = {
+            "videoDurationSeconds": round(float(info.durationSeconds), 3),
+            "probeSeconds": round(probe_seconds, 3),
+            "textAnalysisSeconds": round(text_seconds, 3),
+            "audioAnalysisSeconds": round(audio_seconds, 3),
+            "visionAnalysisSeconds": round(vision_seconds, 3),
+            "gestureAnalysisSeconds": round(gesture_seconds, 3),
+            "scoreCalculationSeconds": round(score_seconds, 3),
+            "totalAnalysisSeconds": round(total_seconds, 3),
+            "realTimeFactor": round(total_seconds / info.durationSeconds, 3) if info.durationSeconds > 0 else None,
+        }
+        metrics["analysisPerformance"] = performance
+        logger.info(
+            "Analysis performance: jobId=%s videoDurationSeconds=%.3f textSeconds=%.3f "
+            "audioSeconds=%.3f visionSeconds=%.3f gestureSeconds=%.3f scoreSeconds=%.3f "
+            "totalSeconds=%.3f realTimeFactor=%s",
+            job_id,
+            info.durationSeconds,
+            text_seconds,
+            audio_seconds,
+            vision_seconds,
+            gesture_seconds,
+            score_seconds,
+            total_seconds,
+            performance["realTimeFactor"],
+        )
         self._log_audio_metrics(job_id, info.durationSeconds, metrics)
         self._log_face_detection(job_id, metrics)
         self._log_visual_score_reliability(job_id, metrics)

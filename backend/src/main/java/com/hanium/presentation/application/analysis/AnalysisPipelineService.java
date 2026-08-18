@@ -97,6 +97,11 @@ public class AnalysisPipelineService {
     }
 
     private void executeAnalysis(Long jobId) {
+        long pipelineStarted = System.nanoTime();
+        double analysisEngineSeconds = 0.0;
+        double videoLlmSeconds = 0.0;
+        double textFeedbackSeconds = 0.0;
+        double resultSaveSeconds = 0.0;
         try {
             if (stopIfCancellationRequested(jobId)) return;
 
@@ -106,9 +111,11 @@ public class AnalysisPipelineService {
 
             if (!update(jobId, AnalysisStep.AUDIO_ANALYSIS, 30, "음성, 자세, 시선, 표정 지표를 계산하고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
+            long analysisEngineStarted = System.nanoTime();
             AnalysisEngineResponse basic = analysisEngineClient.analyze(
                     new AnalysisEngineRequest(job.getId(), video.getId(), filePath)
             );
+            analysisEngineSeconds = elapsedSeconds(analysisEngineStarted);
             if (basic == null) {
                 throw new IllegalStateException("analysis-engine returned empty response");
             }
@@ -117,9 +124,11 @@ public class AnalysisPipelineService {
             if (!update(jobId, AnalysisStep.VIDEO_LLM_ANALYSIS, 75, "영상 장면을 AI가 관찰하고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
             log.info("Video LLM engine request started. jobId={} videoId={}", job.getId(), video.getId());
+            long videoLlmStarted = System.nanoTime();
             VideoLlmEngineResponse videoLlm = videoLlmEngineClient.analyze(
                     new VideoLlmEngineRequest(job.getId(), video.getId(), filePath)
             );
+            videoLlmSeconds = elapsedSeconds(videoLlmStarted);
             if (videoLlm == null) {
                 throw new IllegalStateException("video-llm-engine returned empty response");
             }
@@ -129,9 +138,13 @@ public class AnalysisPipelineService {
 
             if (!update(jobId, AnalysisStep.RESULT_MERGING, 90, "분석 결과를 합치고 있습니다.")) return;
             if (stopIfCancellationRequested(jobId)) return;
+            long textFeedbackStarted = System.nanoTime();
             TextFeedbackResult textFeedback = generateTextFeedbackSafely(jobId, basic, videoLlm);
+            textFeedbackSeconds = elapsedSeconds(textFeedbackStarted);
             if (stopIfCancellationRequested(jobId)) return;
+            long resultSaveStarted = System.nanoTime();
             if (!saveEngineResult(jobId, basic, videoLlm, textFeedback)) return;
+            resultSaveSeconds = elapsedSeconds(resultSaveStarted);
             if (stopIfCancellationRequested(jobId)) return;
             complete(jobId);
         } catch (Exception exception) {
@@ -141,7 +154,26 @@ public class AnalysisPipelineService {
             }
             log.error("Analysis failed. jobId={}", jobId, exception);
             fail(jobId, AnalysisFailureMessages.safeMessageFrom(exception));
+        } finally {
+            log.info(
+                    "Analysis pipeline performance: jobId={} analysisEngineSeconds={} videoLlmSeconds={} "
+                            + "textFeedbackSeconds={} resultSaveSeconds={} totalSeconds={}",
+                    jobId,
+                    roundSeconds(analysisEngineSeconds),
+                    roundSeconds(videoLlmSeconds),
+                    roundSeconds(textFeedbackSeconds),
+                    roundSeconds(resultSaveSeconds),
+                    roundSeconds(elapsedSeconds(pipelineStarted))
+            );
         }
+    }
+
+    private static double elapsedSeconds(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000_000.0;
+    }
+
+    private static double roundSeconds(double seconds) {
+        return Math.round(seconds * 1000.0) / 1000.0;
     }
 
     boolean claimQueuedForProcessing(Long jobId) {

@@ -67,6 +67,7 @@ storage/models/
 
 # Backup artifacts
 backups/
+artifacts/performance/
 *.sql
 *.sql.gz
 *.backup

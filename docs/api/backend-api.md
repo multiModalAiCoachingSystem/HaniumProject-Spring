@@ -110,7 +110,7 @@
     "originalFilename": "presentation.mp4",
     "mimeType": "video/mp4",
     "fileSize": 10485760,
-    "durationSeconds": null,
+    "durationSeconds": 180.25,
     "createdAt": "2026-07-07T19:00:00+09:00"
   },
   "message": "영상이 업로드되었습니다.",
@@ -118,9 +118,11 @@
 }
 ```
 
-오류 상태 코드: 400 `INVALID_VIDEO_TYPE`, `VIDEO_FILE_TOO_LARGE`, `STORAGE_ERROR`; 401 인증 실패
+오류 상태 코드: 400 `INVALID_VIDEO_TYPE`, `VIDEO_FILE_TOO_LARGE`, `VIDEO_TOO_SHORT`, `VIDEO_TOO_LONG`, `INVALID_VIDEO_METADATA`, `STORAGE_ERROR`; 401 인증 실패
 
 업로드 제한은 `backend/src/main/java/.../VideoFileCommandService.java`의 `MAX_VIDEO_BYTES`, `ALLOWED_MIME_TYPES`와 `frontend/src/constants/fileConstants.js`에 있다.
+
+영상 길이는 ffprobe가 읽은 실제 metadata를 기준으로 검증한다. 기본 허용 범위는 5초 이상 600초 이하이며 `VIDEO_MIN_DURATION_SECONDS`, `VIDEO_MAX_DURATION_SECONDS`로 조정한다. 짧은 영상은 `VIDEO_TOO_SHORT`, 긴 영상은 `VIDEO_TOO_LONG`, 판독할 수 없는 영상은 `INVALID_VIDEO_METADATA`를 반환한다. metadata 검증에 실패한 파일은 DB row를 만들지 않고 저장 파일을 정리한다.
 
 ## 분석 API
 
@@ -154,7 +156,18 @@
 }
 ```
 
-오류 상태 코드: 400 `VALIDATION_ERROR`; 403 `VIDEO_OWNER_MISMATCH`; 404 `VIDEO_NOT_FOUND`
+오류 상태 코드: 400 `VALIDATION_ERROR`; 403 `VIDEO_OWNER_MISMATCH`; 404 `VIDEO_NOT_FOUND`; 409 `ANALYSIS_ALREADY_ACTIVE`
+
+`POST /api/analyses`는 같은 `videoId`에 `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED` job이 이미 있으면 새 job을 만들지 않고 409 `ANALYSIS_ALREADY_ACTIVE`를 반환한다. 응답의 `data.jobId`에는 기존 활성 job ID가 포함된다. 종료된 job만 있는 기존 영상에 최초 분석 API를 다시 호출하면 별도 분석 이력으로 새 job을 생성한다. `FAILED`/`CANCELED`의 동일 이력 재실행은 retry API를 사용하며 `DONE`은 retry 대상이 아니다.
+
+```json
+{
+  "success": false,
+  "data": { "jobId": 20 },
+  "message": "이미 분석이 진행 중인 영상입니다.",
+  "errorCode": "ANALYSIS_ALREADY_ACTIVE"
+}
+```
 
 ### GET `/api/analyses/reports`
 

@@ -48,6 +48,9 @@ app:
       api-per-minute: ${RATE_LIMIT_API_PER_MINUTE:120}
   storage:
     root: ${STORAGE_ROOT:/app/storage}
+  video:
+    min-duration-seconds: ${VIDEO_MIN_DURATION_SECONDS:5}
+    max-duration-seconds: ${VIDEO_MAX_DURATION_SECONDS:600}
   analysis-engine:
     base-url: ${ANALYSIS_ENGINE_BASE_URL:http://localhost:8001}
   analysis-recovery:

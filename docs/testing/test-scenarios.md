@@ -15,6 +15,8 @@
 
 - 지원 MIME 타입 업로드 성공: mp4, quicktime, avi, matroska, webm
 - 500MB 초과 파일 거부
+- 5초 미만 영상은 `VIDEO_TOO_SHORT`, 600초 초과 영상은 `VIDEO_TOO_LONG`
+- ffprobe metadata 판독 실패는 `INVALID_VIDEO_METADATA`, 저장 파일과 DB row가 남지 않음
 - 빈 파일 또는 미지원 MIME 타입 거부
 - 다른 사용자의 영상 상세/스트림 접근 거부
 
@@ -29,6 +31,8 @@
 - `QUEUED` 취소 → `CANCELED`, `PROCESSING` 취소 → `CANCEL_REQUESTED`
 - 취소 확인 후 pipeline이 `DONE` 또는 `FAILED`로 덮어쓰지 않음
 - 진행 중 job 재시도 시 409 `ANALYSIS_ALREADY_RUNNING`
+- 같은 `videoId`의 활성 job 생성 요청 2회 시 하나만 생성되고 기존 `jobId`를 포함한 409 `ANALYSIS_ALREADY_ACTIVE`
+- 동일 job 결과 저장을 반복해도 `final_analysis_results.job_id` 기준 한 row만 존재
 
 ## 결과
 

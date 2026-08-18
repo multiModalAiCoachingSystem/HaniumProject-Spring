@@ -8,9 +8,19 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(AnalysisAlreadyActiveException.class)
+    public ResponseEntity<ApiResponse<Map<String, Long>>> handleAnalysisAlreadyActive(
+            AnalysisAlreadyActiveException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiResponse<>(false, Map.of("jobId", exception.jobId()), exception.getMessage(),
+                        exception.errorCode().name()));
+    }
+
     // 함수 역할: handleBusinessException에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
@@ -38,7 +48,7 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case ACCESS_DENIED, VIDEO_OWNER_MISMATCH -> HttpStatus.FORBIDDEN;
             case USER_NOT_FOUND, VIDEO_NOT_FOUND, ANALYSIS_JOB_NOT_FOUND, RESULT_NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case ANALYSIS_ALREADY_RUNNING, ANALYSIS_RETRY_NOT_ALLOWED, ANALYSIS_CANCEL_NOT_ALLOWED, ANALYSIS_SOURCE_VIDEO_MISSING,
+            case ANALYSIS_ALREADY_ACTIVE, ANALYSIS_ALREADY_RUNNING, ANALYSIS_RETRY_NOT_ALLOWED, ANALYSIS_CANCEL_NOT_ALLOWED, ANALYSIS_SOURCE_VIDEO_MISSING,
                     ANALYSIS_DELETE_NOT_ALLOWED -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };

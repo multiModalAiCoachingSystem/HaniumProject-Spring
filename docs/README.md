@@ -4,6 +4,7 @@
 
 | 분류 | 문서 | 목적 | 상태 |
 |---|---|---|---|
+| requirements | [데이터 무결성 요구사항 개정](requirements/data-integrity-policy.md) | 재시도 ID, 영상 길이, 활성 job, 결과 1:1 정책 | 작성 완료 |
 | analysis-criteria | [전체 평가 점수](analysis-criteria/01-scoring-criteria.md) | 최종 점수 계산 기준 | 작성 완료 |
 | analysis-criteria | [말하기 속도](analysis-criteria/02-speech-speed.md) | 발화 속도 측정 및 점수화 | 작성 완료 |
 | analysis-criteria | [Filler Word](analysis-criteria/03-filler-words.md) | 불필요 표현 측정 및 점수화 | 작성 완료 |

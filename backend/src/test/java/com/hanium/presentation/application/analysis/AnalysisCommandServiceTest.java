@@ -19,6 +19,7 @@ import com.hanium.presentation.domain.user.type.UserRole;
 import com.hanium.presentation.domain.video.entity.UploadedVideo;
 import com.hanium.presentation.domain.video.repository.UploadedVideoRepository;
 import com.hanium.presentation.global.exception.BusinessException;
+import com.hanium.presentation.global.exception.AnalysisAlreadyActiveException;
 import com.hanium.presentation.global.exception.ErrorCode;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -56,7 +57,7 @@ public class AnalysisCommandServiceTest {
     void startCreatesQueuedJobForOwnedVideoAndRunsPipelineAfterCommit() {
         User owner = user(2L, UserRole.USER);
         UploadedVideo video = video(owner, 10L, "video.mp4", "uploads/video.mp4");
-        when(videoFileQueryService.loadOwnedVideo(owner, video.getId())).thenReturn(video);
+        when(videoFileQueryService.loadOwnedVideoForUpdate(owner, video.getId())).thenReturn(video);
         when(analysisJobRepository.save(any(AnalysisJob.class))).thenAnswer(invocation -> {
             AnalysisJob saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -73,12 +74,30 @@ public class AnalysisCommandServiceTest {
     @Test
     void startRejectsAnotherUsersVideo() {
         User requester = user(3L, UserRole.USER);
-        when(videoFileQueryService.loadOwnedVideo(requester, 10L))
+        when(videoFileQueryService.loadOwnedVideoForUpdate(requester, 10L))
                 .thenThrow(new BusinessException(ErrorCode.VIDEO_OWNER_MISMATCH));
 
         assertThatThrownBy(() -> service().start(requester, 10L))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.errorCode()).isEqualTo(ErrorCode.VIDEO_OWNER_MISMATCH));
+
+        verify(analysisJobRepository, never()).save(any(AnalysisJob.class));
+        verify(pipelineService, never()).runAnalysis(any());
+    }
+
+    @Test
+    void startRejectsSecondActiveJobForSameVideoAndReturnsExistingJobId() {
+        User owner = user(2L, UserRole.USER);
+        UploadedVideo video = video(owner, 10L, "video.mp4", "uploads/video.mp4");
+        AnalysisJob active = job(owner, video, 100L, AnalysisStatus.PROCESSING);
+        when(videoFileQueryService.loadOwnedVideoForUpdate(owner, video.getId())).thenReturn(video);
+        when(analysisJobRepository.findFirstByVideoIdAndStatusInOrderByCreatedAtAsc(
+                org.mockito.ArgumentMatchers.eq(video.getId()), any()))
+                .thenReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> service().start(owner, video.getId()))
+                .isInstanceOfSatisfying(AnalysisAlreadyActiveException.class,
+                        exception -> assertThat(exception.jobId()).isEqualTo(active.getId()));
 
         verify(analysisJobRepository, never()).save(any(AnalysisJob.class));
         verify(pipelineService, never()).runAnalysis(any());
@@ -197,7 +216,7 @@ public class AnalysisCommandServiceTest {
         Files.createDirectories(storageRoot.resolve("uploads"));
         Files.writeString(storageRoot.resolve(video.getRelativePath()), "video");
         createAnalysisTargets(job);
-        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
+        stubRetryLookup(owner, job);
 
         var response = withAfterCommitResult(() -> service().retry(owner, job.getId()));
 
@@ -218,7 +237,7 @@ public class AnalysisCommandServiceTest {
         AnalysisJob job = job(owner, video, 100L, AnalysisStatus.FAILED);
         Files.createDirectories(storageRoot.resolve("uploads"));
         Files.writeString(storageRoot.resolve(video.getRelativePath()), "video");
-        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
+        stubRetryLookup(owner, job);
 
         var response = withAfterCommitResult(() -> service().retry(owner, job.getId()));
 
@@ -236,7 +255,7 @@ public class AnalysisCommandServiceTest {
         User owner = user(2L, UserRole.USER);
         UploadedVideo video = video(owner, 10L, "video.mp4", "uploads/video.mp4");
         AnalysisJob job = job(owner, video, 100L, status);
-        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
+        stubRetryLookup(owner, job);
 
         assertThatThrownBy(() -> service().retry(owner, job.getId()))
                 .isInstanceOf(BusinessException.class);
@@ -250,7 +269,7 @@ public class AnalysisCommandServiceTest {
         User owner = user(2L, UserRole.USER);
         UploadedVideo video = video(owner, 10L, "missing.mp4", "uploads/missing.mp4");
         AnalysisJob job = job(owner, video, 100L, AnalysisStatus.CANCELED);
-        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
+        stubRetryLookup(owner, job);
 
         assertThatThrownBy(() -> service().retry(owner, job.getId()))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -352,6 +371,12 @@ public class AnalysisCommandServiceTest {
     private AnalysisCommandService service() {
         return new AnalysisCommandService(analysisJobRepository, resultRepository, uploadedVideoRepository,
                 videoFileQueryService, pipelineService, new StorageCleanupService(storageRoot.toString()), storageRoot.toString());
+    }
+
+    private void stubRetryLookup(User owner, AnalysisJob job) {
+        when(analysisJobRepository.findByIdWithVideoAndUser(job.getId())).thenReturn(Optional.of(job));
+        when(videoFileQueryService.loadOwnedVideoForUpdate(owner, job.getVideo().getId())).thenReturn(job.getVideo());
+        when(analysisJobRepository.findByIdWithVideoAndUserForUpdate(job.getId())).thenReturn(Optional.of(job));
     }
 
     private User user(Long id, UserRole role) {

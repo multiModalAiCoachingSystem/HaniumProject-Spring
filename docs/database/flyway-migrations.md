@@ -17,6 +17,9 @@
 |---|---|---|
 | V1 | `V1__baseline_schema.sql` | 완전히 빈 DB에 현재 5개 애플리케이션 테이블과 제약조건 생성 |
 | V2 | `V2__add_query_indexes.sql` | Repository 조회 패턴에 필요한 복합 인덱스 4개 추가 |
+| V3 | `V3__enforce_single_active_job_per_video.sql` | 활성 상태 전용 generated column과 unique 제약으로 같은 영상의 활성 job 중복 방지 |
+
+V3 적용 전에 `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED` 상태가 같은 `video_id`에 중복되어 있지 않은지 확인한다. 중복이 있으면 migration이 실패하며 기존 row를 자동 삭제하거나 병합하지 않는다. 종료 상태는 generated column 값이 `NULL`이므로 같은 영상에 여러 분석 이력을 허용한다.
 
 V1은 `users`, `refresh_tokens`, `uploaded_videos`, `analysis_jobs`, `final_analysis_results`를 생성한다. 기존 DB에만 존재하는 수동 백업 테이블 `final_analysis_results_backup_20260706`은 애플리케이션 Entity가 아니므로 migration 관리 대상에 포함하지 않았다.
 

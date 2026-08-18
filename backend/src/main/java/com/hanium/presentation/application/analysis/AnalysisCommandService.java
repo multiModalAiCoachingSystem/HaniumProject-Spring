@@ -11,6 +11,7 @@ import com.hanium.presentation.domain.user.entity.User;
 import com.hanium.presentation.domain.user.type.UserRole;
 import com.hanium.presentation.domain.video.entity.UploadedVideo;
 import com.hanium.presentation.domain.video.repository.UploadedVideoRepository;
+import com.hanium.presentation.global.exception.AnalysisAlreadyActiveException;
 import com.hanium.presentation.global.exception.BusinessException;
 import com.hanium.presentation.global.exception.ErrorCode;
 import com.hanium.presentation.presentation.dto.response.AnalysisCancelResponse;
@@ -18,6 +19,7 @@ import com.hanium.presentation.presentation.dto.response.AnalysisRetryResponse;
 import com.hanium.presentation.presentation.dto.response.AnalysisStartResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @Service
 public class AnalysisCommandService {
+    private static final List<AnalysisStatus> ACTIVE_STATUSES = List.of(
+            AnalysisStatus.QUEUED,
+            AnalysisStatus.PROCESSING,
+            AnalysisStatus.CANCEL_REQUESTED
+    );
     private final AnalysisJobRepository analysisJobRepository;
     private final FinalAnalysisResultRepository resultRepository;
     private final UploadedVideoRepository uploadedVideoRepository;
@@ -53,7 +60,8 @@ public class AnalysisCommandService {
     // 함수 역할: start에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
     @Transactional
     public AnalysisStartResponse start(User user, Long videoId) {
-        UploadedVideo video = videoFileQueryService.loadOwnedVideo(user, videoId);
+        UploadedVideo video = videoFileQueryService.loadOwnedVideoForUpdate(user, videoId);
+        rejectWhenActiveJobExists(video.getId(), null);
         AnalysisJob job = analysisJobRepository.save(new AnalysisJob(user, video));
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             // 함수 역할: afterCommit에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
@@ -100,9 +108,15 @@ public class AnalysisCommandService {
     // 함수 역할: 실패한 분석 작업을 초기화하고 같은 jobId로 분석 파이프라인을 다시 실행합니다.
     @Transactional
     public AnalysisRetryResponse retry(User requester, Long jobId) {
+        AnalysisJob snapshot = analysisJobRepository.findByIdWithVideoAndUser(jobId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ANALYSIS_JOB_NOT_FOUND));
+        if (!snapshot.getUser().getId().equals(requester.getId())) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        videoFileQueryService.loadOwnedVideoForUpdate(requester, snapshot.getVideo().getId());
         AnalysisJob job = analysisJobRepository.findByIdWithVideoAndUserForUpdate(jobId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ANALYSIS_JOB_NOT_FOUND));
-
         if (!job.getUser().getId().equals(requester.getId())) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
@@ -115,6 +129,8 @@ public class AnalysisCommandService {
         if (job.getStatus() != AnalysisStatus.FAILED && job.getStatus() != AnalysisStatus.CANCELED) {
             throw new BusinessException(ErrorCode.ANALYSIS_RETRY_NOT_ALLOWED);
         }
+
+        rejectWhenActiveJobExists(job.getVideo().getId(), job.getId());
 
         UploadedVideo video = job.getVideo();
         Path sourceVideo = storageRoot.resolve(video.getRelativePath()).normalize();
@@ -135,6 +151,14 @@ public class AnalysisCommandService {
             }
         });
         return new AnalysisRetryResponse(job.getId(), job.getStatus().name(), "분석을 다시 시작했습니다.");
+    }
+
+    private void rejectWhenActiveJobExists(Long videoId, Long allowedJobId) {
+        analysisJobRepository.findFirstByVideoIdAndStatusInOrderByCreatedAtAsc(videoId, ACTIVE_STATUSES)
+                .filter(active -> allowedJobId == null || !active.getId().equals(allowedJobId))
+                .ifPresent(active -> {
+                    throw new AnalysisAlreadyActiveException(active.getId());
+                });
     }
 
     @Transactional

@@ -42,12 +42,18 @@ public class UploadedVideo {
 
     // 함수 역할: UploadedVideo에서 업로드 파일을 검증하고 저장 또는 응답 데이터를 구성합니다.
     public UploadedVideo(User user, String originalFilename, String storedFilename, String relativePath, String mimeType, long fileSize) {
+        this(user, originalFilename, storedFilename, relativePath, mimeType, fileSize, null);
+    }
+
+    public UploadedVideo(User user, String originalFilename, String storedFilename, String relativePath,
+                         String mimeType, long fileSize, Double durationSeconds) {
         this.user = user;
         this.originalFilename = originalFilename;
         this.storedFilename = storedFilename;
         this.relativePath = relativePath;
         this.mimeType = mimeType;
         this.fileSize = fileSize;
+        this.durationSeconds = durationSeconds;
     }
 
     // 함수 역할: onCreate에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.

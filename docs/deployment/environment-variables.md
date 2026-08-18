@@ -16,6 +16,8 @@ Copy-Item .\infra\docker\.env.example .\infra\docker\.env
 | `HOST_STORAGE_PATH` | Docker bind mount | 호스트의 공유 저장소 경로. 프로젝트 내부가 아닌 기존 디렉터리 사용 | `<프로젝트-외부-storage-경로>` |
 | `STORAGE_ROOT` | backend, analysis-engine, video-llm-engine | 컨테이너 내부 공유 저장소 경로 | `/app/storage` |
 | `ANALYSIS_RECOVERY_MAX_ATTEMPTS` | backend | backend 재시작 시 job 자동 복구 최대 횟수 | `3` |
+| `VIDEO_MIN_DURATION_SECONDS` | backend | 업로드 가능한 최소 실제 영상 길이(초) | `5` |
+| `VIDEO_MAX_DURATION_SECONDS` | backend | 업로드 가능한 최대 실제 영상 길이(초) | `600` |
 | `HF_HOME` | analysis-engine | Hugging Face 모델 캐시 경로 | `/app/storage/models/huggingface` |
 | `DB_NAME` | mysql, backend | MySQL 데이터베이스 이름 | `presentation_coaching_ai` |
 | `DB_USERNAME` | mysql, backend | MySQL 애플리케이션 계정 | `presentation` |

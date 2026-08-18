@@ -11,7 +11,7 @@ flowchart LR
     AnalysisAPI --> Jobs["analysis_jobs"]
 ```
 
-업로드 파일은 `VideoFileCommandService.upload()`에서 MIME 타입과 크기를 검증한 뒤 `STORAGE_ROOT/uploads` 아래 저장된다. DB에는 원본 파일명, 저장 파일명, 상대 경로, MIME 타입, 파일 크기가 저장된다.
+업로드 파일은 `VideoFileCommandService.upload()`에서 MIME 타입과 크기를 검증한 뒤 `STORAGE_ROOT/uploads` 아래 저장된다. 이어서 ffprobe로 실제 영상 길이를 확인하고 기본 5~600초 범위인지 검증한 뒤에만 DB row를 만든다. 검증 또는 DB 저장 실패 시 저장 파일을 정리한다. DB에는 원본 파일명, 저장 파일명, 상대 경로, MIME 타입, 파일 크기, 영상 길이가 저장된다.
 
 ## 분석 데이터 흐름
 
@@ -53,7 +53,13 @@ flowchart TB
 
 파일이 이미 없거나 개별 artifact 삭제가 실패하면 warning 로그를 남기고 DB 삭제는 계속한다. 다른 job이 같은 `uploaded_videos` row를 참조하면 원본과 video row는 보존한다.
 
+## Job과 결과 무결성
+
+- 최초 분석은 새 job을 생성한다.
+- `FAILED`, `CANCELED` 재시도는 기존 결과와 부분 산출물을 정리하고 동일 job을 `QUEUED`로 되돌린다.
+- 같은 영상의 활성 job은 애플리케이션 락과 DB unique 제약으로 하나만 허용한다.
+- `FinalAnalysisResult`는 `AnalysisJob` 기준 `1 : 0..1`이다.
+
 ## 미구현/주의
 
-- `durationSeconds`는 `uploaded_videos` 엔티티에 있지만 업로드 시 채우지 않는다.
 - 별도 `basic_analysis_results`, `video_llm_analysis_results`, `open_ai_feedback_results` 테이블은 현재 엔티티/JPA 저장 구현이 없다.

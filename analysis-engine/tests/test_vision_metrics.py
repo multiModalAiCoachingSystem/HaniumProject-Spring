@@ -10,10 +10,44 @@ from app.services.vision_metrics import (
     _enable_auto_orientation,
     _face_box_ratio,
     _face_landmark_box_ratio,
+    _is_looking_at_camera,
+    _measure_gaze,
 )
 
 
 class VisionMetricsTest(unittest.TestCase):
+    def test_forward_gaze_thresholds(self) -> None:
+        self.assertTrue(_is_looking_at_camera(0.0, 0.0, 0.5, 0.5))
+        self.assertTrue(_is_looking_at_camera(5.0, 3.0, 0.5, 0.5))
+        self.assertTrue(_is_looking_at_camera(12.0, 8.0, 0.5, 0.5))
+        self.assertFalse(_is_looking_at_camera(30.0, 0.0, 0.5, 0.5))
+        self.assertFalse(_is_looking_at_camera(0.0, 25.0, 0.5, 0.5))
+
+    def test_missing_landmarks_are_not_valid_gaze(self) -> None:
+        self.assertIsNone(_measure_gaze(SimpleNamespace(landmark=[])))
+
+    def test_repeated_identical_forward_landmarks_remain_eye_contact(self) -> None:
+        landmarks = [SimpleNamespace(x=0.5, y=0.5) for _ in range(478)]
+        landmarks[33] = SimpleNamespace(x=0.30, y=0.35)
+        landmarks[263] = SimpleNamespace(x=0.70, y=0.35)
+        landmarks[1] = SimpleNamespace(x=0.50, y=0.71)
+        landmarks[133] = SimpleNamespace(x=0.42, y=0.35)
+        landmarks[159] = SimpleNamespace(x=0.36, y=0.32)
+        landmarks[145] = SimpleNamespace(x=0.36, y=0.38)
+        landmarks[362] = SimpleNamespace(x=0.58, y=0.35)
+        landmarks[386] = SimpleNamespace(x=0.64, y=0.32)
+        landmarks[374] = SimpleNamespace(x=0.64, y=0.38)
+        for index in (468, 469, 470, 471, 472):
+            landmarks[index] = SimpleNamespace(x=0.36, y=0.35)
+        for index in (473, 474, 475, 476, 477):
+            landmarks[index] = SimpleNamespace(x=0.64, y=0.35)
+        face = SimpleNamespace(landmark=landmarks)
+
+        measurements = [_measure_gaze(face) for _ in range(10)]
+
+        self.assertTrue(all(item is not None for item in measurements))
+        self.assertEqual(sum(item.looking_at_camera for item in measurements if item is not None), 10)
+
     def test_face_detector_uses_static_mode_for_seeked_frames(self) -> None:
         constructor = Mock(return_value=object())
         mp = SimpleNamespace(

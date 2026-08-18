@@ -48,6 +48,7 @@ erDiagram
         bigint id PK
         bigint user_id FK
         bigint video_id FK
+        bigint active_video_id UK "generated, active status only"
         varchar status
         varchar step
         int progress_percent
@@ -82,6 +83,13 @@ erDiagram
 - `final_analysis_results.job_id`는 `unique=true`이므로 하나의 분석 작업은 최종 결과를 하나만 가진다.
 - 결과 삭제 시 `FinalAnalysisResultRepository.deleteByJobId()` 후 `AnalysisJobRepository.delete()` 순서로 삭제한다.
 
+## 1:1 기준과 활성 Job 제약
+
+- `final_analysis_results.job_id`가 최종 결과의 유일성 기준이다. 관계는 `AnalysisJob 1 : 0..1 FinalAnalysisResult`이다.
+- `final_analysis_results.video_id`에는 unique 제약을 두지 않는다. 하나의 영상은 시간에 따라 여러 종료 job과 결과 이력을 가질 수 있다.
+- `analysis_jobs.active_video_id`는 `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED`일 때만 `video_id`를 반환하는 generated column이다.
+- `uk_analysis_jobs_active_video` unique 제약이 같은 영상의 활성 job을 최대 하나로 제한한다.
+
 ## 인덱스
 
 V1 unique 제약:
@@ -96,3 +104,7 @@ V2 query 인덱스:
 - `analysis_jobs(status, created_at, id)`
 - `uploaded_videos(user_id, created_at, id)`
 - `refresh_tokens(user_id, revoked)`
+
+V3 무결성 제약:
+
+- `analysis_jobs(active_video_id)` unique constraint `uk_analysis_jobs_active_video`

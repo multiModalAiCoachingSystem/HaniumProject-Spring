@@ -37,7 +37,7 @@
 | `relative_path` | VARCHAR(255), NOT NULL | `STORAGE_ROOT` 기준 상대 경로 |
 | `mime_type` | VARCHAR(120), NOT NULL | 업로드 MIME 타입 |
 | `file_size` | BIGINT, NOT NULL | 파일 크기 byte |
-| `duration_seconds` | DOUBLE, NULL | 현재 업로드 시 채우지 않음 |
+| `duration_seconds` | DOUBLE, NULL | ffprobe로 확인한 실제 영상 길이(초). 기존 row는 NULL일 수 있음 |
 | `created_at` | DATETIME, NOT NULL, updatable=false | 생성 시각 |
 
 ## `analysis_jobs`
@@ -47,6 +47,7 @@
 | `id` | BIGINT PK, auto increment | jobId |
 | `user_id` | BIGINT FK, NOT NULL | 요청 사용자 |
 | `video_id` | BIGINT FK, NOT NULL | 분석 대상 영상 |
+| `active_video_id` | BIGINT generated, NULL, UNIQUE | 활성 상태에서만 `video_id`; 한 영상의 활성 job 중복 방지 |
 | `status` | VARCHAR(30), NOT NULL | `AnalysisStatus` |
 | `step` | VARCHAR(40), NOT NULL | `AnalysisStep` |
 | `progress_percent` | INT, NOT NULL | 진행률 |
@@ -74,6 +75,8 @@
 | `feedback_json` | LONGTEXT, NOT NULL | basic/video LLM observation JSON 문자열 |
 | `summary_json` | LONGTEXT, NOT NULL | transcript, stt, metrics, metadata JSON 문자열 |
 | `created_at` | DATETIME, NOT NULL, updatable=false | 생성 시각 |
+
+`final_analysis_results`의 1:1 unique 기준은 `job_id`다. `video_id`에는 unique 제약을 두지 않으며, 하나의 영상에 여러 종료 분석 이력이 생기면 각 job이 결과를 최대 하나씩 가진다.
 
 ## 삭제 순서와 연관관계
 

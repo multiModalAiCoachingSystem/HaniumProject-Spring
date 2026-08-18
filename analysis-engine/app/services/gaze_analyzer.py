@@ -17,4 +17,9 @@ class GazeAnalyzer:
             "gazeDetectedFrameCount": metrics.get("gazeDetectedFrameCount"),
             "gazeDetectionRatio": metrics.get("gazeDetectionRatio"),
             "eyeContactFrameCount": metrics.get("eyeContactFrameCount"),
+            "gazeYawDegreesAverage": metrics.get("gazeYawDegreesAverage"),
+            "gazePitchDegreesAverage": metrics.get("gazePitchDegreesAverage"),
+            "gazeEyeHorizontalRatioAverage": metrics.get("gazeEyeHorizontalRatioAverage"),
+            "gazeEyeVerticalRatioAverage": metrics.get("gazeEyeVerticalRatioAverage"),
+            "gazeIrisUsedRatio": metrics.get("gazeIrisUsedRatio"),
         }

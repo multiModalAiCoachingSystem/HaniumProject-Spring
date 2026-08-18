@@ -7,6 +7,7 @@ import com.hanium.presentation.domain.video.entity.UploadedVideo;
 import com.hanium.presentation.domain.video.repository.UploadedVideoRepository;
 import com.hanium.presentation.global.exception.BusinessException;
 import com.hanium.presentation.global.exception.ErrorCode;
+import com.hanium.presentation.global.properties.VideoUploadProperties;
 import com.hanium.presentation.presentation.dto.response.VideoResponse;
 import java.io.IOException;
 import java.nio.file.*;
@@ -32,13 +33,19 @@ public class VideoFileCommandService {
 
     private final UploadedVideoRepository uploadedVideoRepository;
     private final StorageCleanupService storageCleanupService;
+    private final VideoMetadataService videoMetadataService;
+    private final VideoUploadProperties videoUploadProperties;
     private final Path storageRoot;
 
     public VideoFileCommandService(UploadedVideoRepository uploadedVideoRepository,
                                    StorageCleanupService storageCleanupService,
+                                   VideoMetadataService videoMetadataService,
+                                   VideoUploadProperties videoUploadProperties,
                                    @Value("${app.storage.root:${STORAGE_ROOT:/app/storage}}") String storageRoot) {
         this.uploadedVideoRepository = uploadedVideoRepository;
         this.storageCleanupService = storageCleanupService;
+        this.videoMetadataService = videoMetadataService;
+        this.videoUploadProperties = videoUploadProperties;
         this.storageRoot = Path.of(storageRoot).normalize();
     }
 
@@ -59,13 +66,35 @@ public class VideoFileCommandService {
             storageCleanupService.cleanupPartialUpload(target);
             throw new BusinessException(ErrorCode.STORAGE_ERROR);
         }
+
+        double durationSeconds;
+        try {
+            durationSeconds = videoMetadataService.durationSeconds(target);
+            validateDuration(durationSeconds);
+        } catch (BusinessException exception) {
+            storageCleanupService.cleanupPartialUpload(target);
+            throw exception;
+        }
+
         UploadedVideo video = new UploadedVideo(user, cleanOriginalName(file.getOriginalFilename()), storedFilename,
-                "uploads/" + storedFilename, file.getContentType(), file.getSize());
+                "uploads/" + storedFilename, file.getContentType(), file.getSize(), durationSeconds);
         try {
             return VideoResponse.from(uploadedVideoRepository.save(video));
         } catch (RuntimeException exception) {
             storageCleanupService.cleanupPartialUpload(target);
             throw exception;
+        }
+    }
+
+    private void validateDuration(double durationSeconds) {
+        if (!Double.isFinite(durationSeconds) || durationSeconds <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_VIDEO_METADATA);
+        }
+        if (durationSeconds < videoUploadProperties.getMinDurationSeconds()) {
+            throw new BusinessException(ErrorCode.VIDEO_TOO_SHORT);
+        }
+        if (durationSeconds > videoUploadProperties.getMaxDurationSeconds()) {
+            throw new BusinessException(ErrorCode.VIDEO_TOO_LONG);
         }
     }
 

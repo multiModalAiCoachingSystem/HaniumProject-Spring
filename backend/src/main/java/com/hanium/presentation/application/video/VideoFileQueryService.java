@@ -46,6 +46,16 @@ public class VideoFileQueryService {
         return video;
     }
 
+    @Transactional
+    public UploadedVideo loadOwnedVideoForUpdate(User user, Long videoId) {
+        UploadedVideo video = uploadedVideoRepository.findByIdForUpdate(videoId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VIDEO_NOT_FOUND));
+        if (!video.getUser().getId().equals(user.getId()) && !"ADMIN".equals(user.getRole().name())) {
+            throw new BusinessException(ErrorCode.VIDEO_OWNER_MISMATCH);
+        }
+        return video;
+    }
+
     // 함수 역할: resource에서 도메인 처리에 필요한 비즈니스 로직을 수행합니다.
     public Resource resource(UploadedVideo video) {
         return streamResource(video).resource();

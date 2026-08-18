@@ -49,6 +49,14 @@
 
 현재 analysis-engine의 점수 category는 `POSTURE`, `EXPRESSION`, `EYE_CONTACT`, `VOICE`, `GESTURE`를 사용한다. 백엔드 enum과 완전히 일치하지 않는다.
 
+## Job ID와 활성 작업 정책
+
+- 최초 분석은 업로드된 `videoId`에 새 `jobId`를 만든다.
+- `FAILED`, `CANCELED` 재시도는 같은 분석 이력의 재실행이므로 동일 `jobId`를 유지한다.
+- `DONE`은 retry endpoint에서 재시도할 수 없다. 종료된 영상을 별도 이력으로 다시 분석하려면 최초 분석 API를 호출해 새 job을 만든다.
+- `QUEUED`, `PROCESSING`, `CANCEL_REQUESTED` 중 하나가 같은 영상에 존재하면 새 job 생성과 다른 종료 job의 재시도를 409로 거부한다.
+- 애플리케이션은 `uploaded_videos` row를 비관적 쓰기 락으로 직렬화하고, DB는 V3의 `uk_analysis_jobs_active_video` unique 제약으로 최종 보장한다.
+
 ## 재시도 시 변경되는 컬럼
 
 `AnalysisJob.retry()`가 다음 컬럼을 변경한다.

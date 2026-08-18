@@ -4,6 +4,7 @@ package com.hanium.presentation.domain.analysis.repository;
 import com.hanium.presentation.domain.analysis.entity.AnalysisJob;
 import com.hanium.presentation.domain.analysis.type.AnalysisStatus;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -42,6 +43,11 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, Long>,
     Page<AnalysisJob> findAll(@Nullable Specification<AnalysisJob> specification, Pageable pageable);
 
     long countByVideoId(Long videoId);
+
+    Optional<AnalysisJob> findFirstByVideoIdAndStatusInOrderByCreatedAtAsc(
+            Long videoId,
+            Collection<AnalysisStatus> statuses
+    );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """

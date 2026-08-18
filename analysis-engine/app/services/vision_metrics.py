@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from statistics import mean
@@ -39,6 +40,13 @@ FACE_ANALYSIS_MAX_WIDTH = _env_int("FACE_ANALYSIS_MAX_WIDTH", 1280)
 FACE_CROP_RETRY_ENABLED = _env_bool("FACE_CROP_RETRY_ENABLED", True)
 FACE_CROP_PADDING_RATIO = _env_float("FACE_CROP_PADDING_RATIO", 0.25)
 FACE_CROP_MIN_SIZE = _env_int("FACE_CROP_MIN_SIZE", 256)
+GAZE_DIAGNOSTIC_FRAME_LIMIT = max(0, _env_int("GAZE_DIAGNOSTIC_FRAME_LIMIT", 20))
+
+GAZE_MAX_YAW_DEGREES = 15.0
+GAZE_MAX_PITCH_DEGREES = 10.0
+GAZE_NEUTRAL_NOSE_VERTICAL_RATIO = 0.90
+GAZE_IRIS_HORIZONTAL_RANGE = (0.32, 0.68)
+GAZE_IRIS_VERTICAL_RANGE = (0.20, 0.80)
 
 
 FALLBACK_METRICS = {
@@ -117,6 +125,115 @@ def _point(landmarks: Any, index: int) -> tuple[float, float]:
     return float(landmark.x), float(landmark.y)
 
 
+@dataclass(frozen=True)
+class GazeMeasurement:
+    yaw_degrees: float
+    pitch_degrees: float
+    eye_horizontal_ratio: float | None
+    eye_vertical_ratio: float | None
+    iris_used: bool
+    looking_at_camera: bool
+
+
+def _normalized_position(value: float, first: float, second: float) -> float | None:
+    lower, upper = sorted((first, second))
+    span = upper - lower
+    if not all(math.isfinite(item) for item in (value, lower, upper)) or span < 1e-5:
+        return None
+    return (value - lower) / span
+
+
+def _iris_eye_ratio(
+    landmarks: Any,
+    iris_indices: tuple[int, ...],
+    corner_indices: tuple[int, int],
+    eyelid_indices: tuple[int, int],
+) -> tuple[float, float] | None:
+    if len(landmarks) <= max(*iris_indices, *corner_indices, *eyelid_indices):
+        return None
+    iris_x = mean(float(landmarks[index].x) for index in iris_indices)
+    iris_y = mean(float(landmarks[index].y) for index in iris_indices)
+    horizontal = _normalized_position(
+        iris_x,
+        float(landmarks[corner_indices[0]].x),
+        float(landmarks[corner_indices[1]].x),
+    )
+    vertical = _normalized_position(
+        iris_y,
+        float(landmarks[eyelid_indices[0]].y),
+        float(landmarks[eyelid_indices[1]].y),
+    )
+    if horizontal is None or vertical is None:
+        return None
+    if not (-0.5 <= horizontal <= 1.5 and -0.5 <= vertical <= 1.5):
+        return None
+    return horizontal, vertical
+
+
+def _is_looking_at_camera(
+    yaw_degrees: float,
+    pitch_degrees: float,
+    eye_horizontal_ratio: float | None,
+    eye_vertical_ratio: float | None,
+) -> bool:
+    head_forward = (
+        math.isfinite(yaw_degrees)
+        and math.isfinite(pitch_degrees)
+        and abs(yaw_degrees) <= GAZE_MAX_YAW_DEGREES
+        and abs(pitch_degrees) <= GAZE_MAX_PITCH_DEGREES
+    )
+    if not head_forward:
+        return False
+    if eye_horizontal_ratio is None or eye_vertical_ratio is None:
+        return True
+    return (
+        GAZE_IRIS_HORIZONTAL_RANGE[0] <= eye_horizontal_ratio <= GAZE_IRIS_HORIZONTAL_RANGE[1]
+        and GAZE_IRIS_VERTICAL_RANGE[0] <= eye_vertical_ratio <= GAZE_IRIS_VERTICAL_RANGE[1]
+    )
+
+
+def _measure_gaze(face_landmarks: Any) -> GazeMeasurement | None:
+    landmarks = getattr(face_landmarks, "landmark", None)
+    if landmarks is None or len(landmarks) <= 263:
+        return None
+    try:
+        left_eye = _point(landmarks, 33)
+        right_eye = _point(landmarks, 263)
+        nose = _point(landmarks, 1)
+        eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
+        eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+        face_width = abs(right_eye[0] - left_eye[0])
+        if face_width < 0.02:
+            return None
+
+        horizontal_offset = (nose[0] - eye_center_x) / face_width
+        vertical_offset = (nose[1] - eye_center_y) / face_width
+        yaw_degrees = math.degrees(math.atan(horizontal_offset))
+        pitch_degrees = math.degrees(math.atan(vertical_offset - GAZE_NEUTRAL_NOSE_VERTICAL_RATIO))
+
+        right_iris = _iris_eye_ratio(landmarks, (468, 469, 470, 471, 472), (33, 133), (159, 145))
+        left_iris = _iris_eye_ratio(landmarks, (473, 474, 475, 476, 477), (362, 263), (386, 374))
+        iris_ratios = [ratio for ratio in (right_iris, left_iris) if ratio is not None]
+        eye_horizontal_ratio = mean(item[0] for item in iris_ratios) if iris_ratios else None
+        eye_vertical_ratio = mean(item[1] for item in iris_ratios) if iris_ratios else None
+        looking_at_camera = _is_looking_at_camera(
+            yaw_degrees,
+            pitch_degrees,
+            eye_horizontal_ratio,
+            eye_vertical_ratio,
+        )
+        return GazeMeasurement(
+            yaw_degrees=yaw_degrees,
+            pitch_degrees=pitch_degrees,
+            eye_horizontal_ratio=eye_horizontal_ratio,
+            eye_vertical_ratio=eye_vertical_ratio,
+            iris_used=bool(iris_ratios),
+            looking_at_camera=looking_at_camera,
+        )
+    except (IndexError, TypeError, ValueError, AttributeError):
+        return None
+
+
 # 함수 역할: MediaPipe 자세 랜드마크를 이용해 어깨선의 기울기를 각도 단위로 계산합니다.
 def _shoulder_tilt(pose_landmarks: Any) -> float | None:
     left = pose_landmarks.landmark[11]
@@ -132,19 +249,8 @@ def _shoulder_tilt(pose_landmarks: Any) -> float | None:
 
 # 함수 역할: 얼굴이 카메라 방향을 향하고 있는지 추정합니다.
 def _is_forward_gaze(face_landmarks: Any) -> bool:
-    landmarks = face_landmarks.landmark
-    left_eye = _point(landmarks, 33)
-    right_eye = _point(landmarks, 263)
-    nose = _point(landmarks, 1)
-    eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
-    eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
-    face_width = abs(right_eye[0] - left_eye[0])
-    if face_width < 0.02:
-        return False
-
-    horizontal_offset = abs(nose[0] - eye_center_x) / face_width
-    vertical_offset = abs(nose[1] - eye_center_y) / face_width
-    return horizontal_offset <= 0.18 and 0.18 <= vertical_offset <= 0.72
+    measurement = _measure_gaze(face_landmarks)
+    return measurement.looking_at_camera if measurement is not None else False
 
 
 # 함수 역할: 간단한 표정 판단 신호로 사용할 입 모양 비율을 계산합니다.
@@ -351,11 +457,18 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
     sampled = 0
     pose_detected = 0
     face_detected = 0
+    gaze_detected = 0
     face_attempted = 0
     full_frame_detected = 0
     crop_retry_attempted = 0
     crop_retry_detected = 0
     forward_gaze = 0
+    gaze_yaw_degrees: list[float] = []
+    gaze_pitch_degrees: list[float] = []
+    gaze_eye_horizontal_ratios: list[float] = []
+    gaze_eye_vertical_ratios: list[float] = []
+    gaze_iris_frames = 0
+    gaze_diagnostic_frames = 0
     stable_pose = 0
     smile_frames = 0
     tense_frames = 0
@@ -425,8 +538,32 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
                 face_detected += 1
                 if not crop_detected:
                     full_frame_detected += 1
-                if _is_forward_gaze(face_landmarks):
-                    forward_gaze += 1
+                gaze = _measure_gaze(face_landmarks)
+                if gaze is not None:
+                    gaze_detected += 1
+                    gaze_yaw_degrees.append(gaze.yaw_degrees)
+                    gaze_pitch_degrees.append(gaze.pitch_degrees)
+                    if gaze.eye_horizontal_ratio is not None:
+                        gaze_eye_horizontal_ratios.append(gaze.eye_horizontal_ratio)
+                    if gaze.eye_vertical_ratio is not None:
+                        gaze_eye_vertical_ratios.append(gaze.eye_vertical_ratio)
+                    if gaze.iris_used:
+                        gaze_iris_frames += 1
+                    if gaze.looking_at_camera:
+                        forward_gaze += 1
+                    if gaze_diagnostic_frames < GAZE_DIAGNOSTIC_FRAME_LIMIT:
+                        logger.debug(
+                            "Gaze frame: frame=%s faceDetected=true landmarksDetected=true "
+                            "yaw=%.2f pitch=%.2f roll=not_used eyeHorizontalRatio=%s "
+                            "eyeVerticalRatio=%s isLookingAtCamera=%s",
+                            frame_index,
+                            gaze.yaw_degrees,
+                            gaze.pitch_degrees,
+                            f"{gaze.eye_horizontal_ratio:.3f}" if gaze.eye_horizontal_ratio is not None else "not_available",
+                            f"{gaze.eye_vertical_ratio:.3f}" if gaze.eye_vertical_ratio is not None else "not_available",
+                            gaze.looking_at_camera,
+                        )
+                        gaze_diagnostic_frames += 1
 
                 mouth = _mouth_ratios(face_landmarks)
                 if mouth:
@@ -482,7 +619,7 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
     avg_movement = mean(movements) if movements else 0.0
     head_movement_ratio = _clamp(avg_movement / 0.08)
     posture_stability_ratio = stable_pose / pose_detected if pose_detected else FALLBACK_METRICS["postureStabilityRatio"]
-    eye_contact_ratio = forward_gaze / face_detected if face_detected else FALLBACK_METRICS["eyeContactRatio"]
+    eye_contact_ratio = forward_gaze / gaze_detected if gaze_detected else FALLBACK_METRICS["eyeContactRatio"]
     tense_ratio = tense_frames / face_detected if face_detected else FALLBACK_METRICS["tenseExpressionRatio"]
     smile_ratio = smile_frames / face_detected if face_detected else FALLBACK_METRICS["smileRatio"]
     natural_ratio = natural_frames / face_detected if face_detected else FALLBACK_METRICS["naturalExpressionRatio"]
@@ -490,6 +627,27 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
     happy_ratio = _clamp(smile_ratio)
     anxious_ratio = _clamp(tense_ratio)
     neutral_ratio = _clamp(1.0 - happy_ratio - anxious_ratio)
+
+    logger.info(
+        "Gaze detection summary: attemptedFrames=%s detectedFrames=%s eyeContactFrames=%s "
+        "eyeContactRatio=%.3f yawRange=%s pitchRange=%s irisUsedRatio=%.3f fallbackUsed=%s",
+        face_attempted,
+        gaze_detected,
+        forward_gaze,
+        eye_contact_ratio,
+        (
+            f"{min(gaze_yaw_degrees):.2f}..{max(gaze_yaw_degrees):.2f}"
+            if gaze_yaw_degrees
+            else "not_available"
+        ),
+        (
+            f"{min(gaze_pitch_degrees):.2f}..{max(gaze_pitch_degrees):.2f}"
+            if gaze_pitch_degrees
+            else "not_available"
+        ),
+        gaze_iris_frames / gaze_detected if gaze_detected else 0.0,
+        gaze_detected == 0,
+    )
 
     return {
         "shoulderTiltDegrees": round(float(avg_tilt), 2),
@@ -518,11 +676,16 @@ def analyze_vision_metrics(file_path: str | None, duration_seconds: float) -> di
         "faceBoxRatioMin": round(min(face_box_ratios), 4) if face_box_ratios else None,
         "faceBoxRatioAverage": round(mean(face_box_ratios), 4) if face_box_ratios else None,
         "faceBoxRatioMax": round(max(face_box_ratios), 4) if face_box_ratios else None,
-        # 시선 판정은 FaceMesh landmark가 있는 프레임에서만 수행한다.
+        # 시선 비율의 분모는 얼굴 프레임이 아니라 실제 gaze geometry가 유효한 프레임이다.
         "gazeAttemptedFrameCount": face_attempted,
-        "gazeDetectedFrameCount": face_detected,
-        "gazeDetectionRatio": round(face_detected / face_attempted, 3) if face_attempted else 0.0,
+        "gazeDetectedFrameCount": gaze_detected,
+        "gazeDetectionRatio": round(gaze_detected / face_attempted, 3) if face_attempted else 0.0,
         "eyeContactFrameCount": forward_gaze,
+        "gazeYawDegreesAverage": round(mean(gaze_yaw_degrees), 2) if gaze_yaw_degrees else None,
+        "gazePitchDegreesAverage": round(mean(gaze_pitch_degrees), 2) if gaze_pitch_degrees else None,
+        "gazeEyeHorizontalRatioAverage": round(mean(gaze_eye_horizontal_ratios), 3) if gaze_eye_horizontal_ratios else None,
+        "gazeEyeVerticalRatioAverage": round(mean(gaze_eye_vertical_ratios), 3) if gaze_eye_vertical_ratios else None,
+        "gazeIrisUsedRatio": round(gaze_iris_frames / gaze_detected, 3) if gaze_detected else 0.0,
         "faceInputWidth": face_input_width,
         "faceInputHeight": face_input_height,
         "videoRotationDegrees": round(orientation_meta, 1),
